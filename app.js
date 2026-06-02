@@ -642,8 +642,8 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
       const response = await fetch("/api/companies", {
         method: "GET",
         headers: {
-          "x-login-id": email,
-          "x-login-password": password,
+          "x-portal-id": email,
+          "x-portal-key": password,
           "x-company-id": companyId
         }
       });

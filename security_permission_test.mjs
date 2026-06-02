@@ -22,8 +22,8 @@ async function login(loginId, password, companyId) {
   const response = await request("/api/companies", {
     method: "GET",
     headers: {
-      "x-login-id": loginId,
-      "x-login-password": password,
+      "x-portal-id": loginId,
+      "x-portal-key": password,
       "x-company-id": companyId || ""
     }
   });

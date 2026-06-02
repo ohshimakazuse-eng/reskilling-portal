@@ -30,8 +30,8 @@ async function login(loginId, password) {
   const response = await request("/api/companies", {
     method: "GET",
     headers: {
-      "x-login-id": loginId,
-      "x-login-password": password
+      "x-portal-id": loginId,
+      "x-portal-key": password
     }
   });
   assert(response.status === 200, `${loginId}: login failed ${response.status}`);

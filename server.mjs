@@ -169,9 +169,9 @@ function resolveLogin(body, companies) {
 
 function loginBodyFromRequest(request) {
   return {
-    loginId: request.headers["x-login-id"] || "",
-    email: request.headers["x-login-id"] || "",
-    password: request.headers["x-login-password"] || "",
+    loginId: request.headers["x-portal-id"] || "",
+    email: request.headers["x-portal-id"] || "",
+    password: request.headers["x-portal-key"] || "",
     companyId: request.headers["x-company-id"] || ""
   };
 }
@@ -290,7 +290,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/companies" && request.method === "GET") {
-    if (request.headers["x-login-id"] && request.headers["x-login-password"]) {
+    if (request.headers["x-portal-id"] && request.headers["x-portal-key"]) {
       const body = loginBodyFromRequest(request);
       const { companies } = await hydratedCompaniesForSession();
       const resolved = resolveLogin(body, companies);
