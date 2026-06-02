@@ -640,9 +640,12 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
   if (apiAvailable()) {
     try {
       const response = await fetch("/api/companies", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ companyId, loginId: email, email, password })
+        method: "GET",
+        headers: {
+          "x-login-id": email,
+          "x-login-password": password,
+          "x-company-id": companyId
+        }
       });
       if (!response.ok) return false;
       const payload = await response.json();

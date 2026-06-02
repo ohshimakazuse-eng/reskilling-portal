@@ -20,9 +20,12 @@ function assert(condition, message) {
 
 async function login(loginId, password, companyId) {
   const response = await request("/api/companies", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ loginId, password, companyId })
+    method: "GET",
+    headers: {
+      "x-login-id": loginId,
+      "x-login-password": password,
+      "x-company-id": companyId || ""
+    }
   });
   assert(response.status === 200, `${loginId}: login failed ${response.status}`);
   assert(response.body?.session?.token, `${loginId}: missing token`);

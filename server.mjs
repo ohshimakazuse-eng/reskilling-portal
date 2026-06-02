@@ -167,6 +167,34 @@ function resolveLogin(body, companies) {
   };
 }
 
+function loginBodyFromRequest(request) {
+  return {
+    loginId: request.headers["x-login-id"] || "",
+    email: request.headers["x-login-id"] || "",
+    password: request.headers["x-login-password"] || "",
+    companyId: request.headers["x-company-id"] || ""
+  };
+}
+
+function createLoginSession(body, companies, resolved) {
+  const { user: demoUser, company } = resolved;
+  const token = crypto.randomUUID();
+  const session = {
+    token,
+    role: demoUser.role,
+    companyId: demoUser.canViewAll ? body.companyId || company.id : company.id,
+    companyIds: demoUser.canViewAll ? companies.map((item) => item.id) : [company.id],
+    name: demoUser.canViewAll ? demoUser.name : `${company.name} ${demoUser.name}`,
+    permissions: {
+      canViewAll: demoUser.canViewAll,
+      canEdit: demoUser.canEdit
+    },
+    signedInAt: new Date().toISOString()
+  };
+  activeSessions.set(token, session);
+  return session;
+}
+
 async function initialData() {
   try {
     const source = await readFile(join(root, "data.js"), "utf8");
@@ -256,25 +284,29 @@ async function handleApi(request, response, pathname) {
       sendJson(response, 403, { ok: false, message: "This company is not a client account." });
       return true;
     }
-    const token = crypto.randomUUID();
-    const session = {
-      token,
-      role: demoUser.role,
-      companyId: demoUser.canViewAll ? body.companyId || company.id : company.id,
-      companyIds: demoUser.canViewAll ? companies.map((item) => item.id) : [company.id],
-      name: demoUser.canViewAll ? demoUser.name : `${company.name} ${demoUser.name}`,
-      permissions: {
-        canViewAll: demoUser.canViewAll,
-        canEdit: demoUser.canEdit
-      },
-      signedInAt: new Date().toISOString()
-    };
-    activeSessions.set(token, session);
+    const session = createLoginSession(body, companies, resolved);
     sendJson(response, 200, { ok: true, session });
     return true;
   }
 
   if (pathname === "/api/companies" && request.method === "GET") {
+    if (request.headers["x-login-id"] && request.headers["x-login-password"]) {
+      const body = loginBodyFromRequest(request);
+      const { companies } = await hydratedCompaniesForSession();
+      const resolved = resolveLogin(body, companies);
+      if (!resolved) {
+        sendJson(response, 401, { ok: false, message: "Invalid credentials" });
+        return true;
+      }
+      const { user: demoUser, company } = resolved;
+      if (demoUser.role === "client" && nonClientCompanyIds.has(company.id)) {
+        sendJson(response, 403, { ok: false, message: "This company is not a client account." });
+        return true;
+      }
+      const session = createLoginSession(body, companies, resolved);
+      sendJson(response, 200, { ok: true, session });
+      return true;
+    }
     const session = requireSession(request, response);
     if (!session) return true;
     const { db, normalizedDb, companies } = await hydratedCompaniesForSession(session);
