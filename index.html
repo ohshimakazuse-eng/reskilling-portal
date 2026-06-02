@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reskill One</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section class="auth-screen" id="authScreen" aria-label="ログイン">
+      <div class="auth-card">
+        <div class="brand auth-brand">
+          <div class="brand-mark">R1</div>
+          <div>
+            <p>Reskill One</p>
+            <span>法人研修の意思決定ボード</span>
+          </div>
+        </div>
+        <div>
+          <p class="eyebrow">Secure access</p>
+          <h1>ログイン</h1>
+          <p class="auth-copy">発行されたログインIDとパスワードでログインしてください。</p>
+        </div>
+        <form class="auth-form" id="loginForm">
+          <label class="form-field hidden">
+            <span>ログイン種別</span>
+            <select id="loginRole">
+              <option value="admin">自社管理者</option>
+              <option value="operator">運用担当者</option>
+              <option value="client">クライアント</option>
+            </select>
+          </label>
+          <label class="form-field hidden" id="loginCompanyField">
+            <span>会社</span>
+            <select id="loginCompany"></select>
+          </label>
+          <label class="form-field">
+            <span>ログインID</span>
+            <input id="loginEmail" type="text" autocomplete="username" />
+          </label>
+          <label class="form-field">
+            <span>パスワード</span>
+            <input id="loginPassword" type="password" autocomplete="current-password" />
+          </label>
+          <p class="auth-error" id="loginError"></p>
+          <button class="primary-button" type="submit">ログイン</button>
+        </form>
+      </div>
+    </section>
+
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="サイドナビゲーション">
+        <div class="brand">
+          <div class="brand-mark">R1</div>
+          <div>
+            <p>Reskill One</p>
+            <span>Training Intelligence</span>
+          </div>
+        </div>
+        <nav class="nav-tabs" aria-label="表示切替">
+          <button class="nav-tab active" data-view="admin">全社管理</button>
+          <button class="nav-tab" data-view="dashboard">会社ページ</button>
+          <button class="nav-tab" data-view="updates">更新</button>
+          <button class="nav-tab" data-view="members">受講生</button>
+        </nav>
+        <div class="sidebar-note">
+          <span class="note-label">対象</span>
+          <strong id="sidebarCompany">全社ポートフォリオ</strong>
+          <small id="sidebarMeta">管理者は全会社を閲覧・管理</small>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="pageEyebrow">Client visibility dashboard</p>
+            <h1 id="pageTitle">全社研修管理</h1>
+            <p class="page-lead" id="pageLead">定例の代わりに、状況・確認事項・次アクションを確認できます。</p>
+          </div>
+          <div class="top-actions">
+            <label>
+              <span>ログイン中</span>
+              <select id="roleSelect" disabled>
+                <option value="admin">自社管理者</option>
+                <option value="operator">運用担当者</option>
+                <option value="client">クライアント</option>
+              </select>
+            </label>
+            <label>
+              <span>会社</span>
+              <select id="companySelect"></select>
+            </label>
+            <label>
+              <span>表示対象</span>
+              <select id="stageFilter">
+                <option value="all">全フェーズ</option>
+                <option value="PR">PR</option>
+                <option value="構築">構築</option>
+              </select>
+            </label>
+            <label>
+              <span>ステータス</span>
+              <select id="statusFilter">
+                <option value="all">すべて</option>
+                <option value="S">S</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="F">F</option>
+              </select>
+            </label>
+            <button class="ghost-button top-logout" id="logoutButton" type="button">ログアウト</button>
+            <button class="ghost-button monthly-reset-button" id="monthlyResetButton" type="button">今月を0で開始</button>
+          </div>
+        </header>
+
+        <section class="view active" id="admin">
+          <section class="exec-focus command-top admin-command-top">
+            <article class="focus-card number-board">
+              <p class="eyebrow">全社サマリー</p>
+              <div class="focus-facts" id="adminFocusFacts"></div>
+            </article>
+
+            <article class="focus-card">
+              <p class="eyebrow">売上</p>
+              <h2>売上上位の受講生</h2>
+              <div class="focus-list" id="adminSalesLeaders"></div>
+            </article>
+
+            <article class="focus-card">
+              <p class="eyebrow">会社別</p>
+              <h2>在籍と売上</h2>
+              <div class="focus-metrics" id="adminCompanySnapshot"></div>
+            </article>
+          </section>
+
+          <div class="content-grid single admin-portfolio-grid">
+            <section class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Company portfolio</p>
+                  <h2>会社別マイページ一覧</h2>
+                </div>
+                <span class="pill">管理者専用</span>
+              </div>
+              <div class="company-grid" id="companyGrid"></div>
+            </section>
+          </div>
+
+          <section class="panel company-create-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">New client</p>
+                <h2>新規法人を追加</h2>
+              </div>
+              <span class="pill">追加後にマイページ自動発行</span>
+            </div>
+            <form class="ops-form company-create-form" id="addCompanyForm">
+              <label class="form-field">
+                <span>会社名</span>
+                <input id="newCompanyName" type="text" placeholder="例: 株式会社サンプル" required />
+              </label>
+              <label class="form-field">
+                <span>ログインID</span>
+                <input id="newCompanyCode" type="text" pattern="[a-z0-9_-]+" placeholder="例: sample" required />
+              </label>
+              <label class="form-field">
+                <span>初期在籍人数</span>
+                <input id="newCompanyEnrollment" type="number" min="0" value="0" />
+              </label>
+              <button class="primary-button" type="submit">法人を追加</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Management table</p>
+                <h2>全社管理テーブル</h2>
+              </div>
+              <input id="companySearchInput" type="search" placeholder="会社名で検索" />
+            </div>
+            <div class="table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th><button class="table-sort active desc" data-sort="name" type="button">会社名</button></th>
+                    <th><button class="table-sort active desc" data-sort="enrollment" type="button">在籍</button></th>
+                    <th><button class="table-sort" data-sort="newCount" type="button">新規</button></th>
+                    <th><button class="table-sort" data-sort="buildCount" type="button">構築</button></th>
+                    <th><button class="table-sort" data-sort="prCount" type="button">PR</button></th>
+                    <th><button class="table-sort" data-sort="progress" type="button">平均進捗</button></th>
+                    <th><button class="table-sort" data-sort="risk" type="button">要確認</button></th>
+                    <th><button class="table-sort" data-sort="sales" type="button">売上</button></th>
+                  </tr>
+                </thead>
+                <tbody id="companyTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="dashboard">
+          <section class="exec-focus command-top dashboard-command-top">
+            <article class="focus-card number-board">
+              <p class="eyebrow">会社サマリー</p>
+              <div class="focus-facts" id="focusConclusionFacts"></div>
+            </article>
+
+            <article class="focus-card">
+              <p class="eyebrow">売上</p>
+              <h2>売上上位の受講生</h2>
+              <div class="focus-list" id="focusPriorityList"></div>
+            </article>
+          </section>
+
+          <section class="exec-summary" id="execSummary">
+            <div class="exec-main">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">進捗報告</p>
+                  <h2>今月の進捗</h2>
+                </div>
+                <span class="pill" id="execStatusPill">判定</span>
+              </div>
+              <p class="exec-message" id="execMessage"></p>
+              <div class="exec-insights" id="execInsights"></div>
+              <form class="progress-report-editor" id="progressReportForm">
+                <div class="panel-header compact">
+                  <div>
+                    <p class="eyebrow">管理者更新</p>
+                    <h3>今月の進捗を編集</h3>
+                  </div>
+                  <button class="primary-button small" type="submit">保存して反映</button>
+                </div>
+                <div class="progress-editor-grid">
+                  <label>
+                    <span>良い変化</span>
+                    <textarea id="progressGood" rows="3"></textarea>
+                  </label>
+                  <label>
+                    <span>確認したい点</span>
+                    <textarea id="progressIssue" rows="3"></textarea>
+                  </label>
+                  <label>
+                    <span>今後の支援方針</span>
+                    <textarea id="progressAction" rows="3"></textarea>
+                  </label>
+                  <label>
+                    <span>貴社への確認事項</span>
+                    <textarea id="progressRequest" rows="3"></textarea>
+                  </label>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <div class="exec-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">フェーズ</p>
+                  <h2>フェーズ構成</h2>
+                </div>
+              </div>
+              <div class="donut-row">
+                <div class="donut" id="stageDonut"></div>
+                <div class="legend-list" id="stageLegend"></div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">評価</p>
+                  <h2>評価分布</h2>
+                </div>
+              </div>
+              <div class="status-table" id="statusTable"></div>
+            </section>
+          </div>
+
+          <div class="content-grid single">
+            <section class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">在籍推移</p>
+                <h2 id="trendTitle">在籍受講生の推移</h2>
+                </div>
+                <span class="pill" id="enrollmentVerdict">判定</span>
+              </div>
+              <div class="line-chart" id="enrollmentChart" aria-label="在籍受講生の月別推移"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="updates">
+          <section class="ops-hero">
+            <div>
+              <p class="eyebrow">運用入力</p>
+              <h2>今月の更新をここで完了</h2>
+              <p>達成項目をチェックすると評価と進捗は自動計算されます。内容を確認してから保存すると各社マイページへ反映されます。</p>
+            </div>
+            <div class="ops-steps">
+              <span>1. 入力</span>
+              <span>2. 自動計算</span>
+              <span>3. 保存して反映</span>
+            </div>
+          </section>
+
+          <div class="update-layout">
+            <section class="panel update-sheet-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">進捗入力</p>
+                  <h2>進捗更新シート</h2>
+                </div>
+                <div class="sheet-actions">
+                  <span class="pill" id="updateDraftPill">未保存なし</span>
+                  <button class="ghost-button" id="discardUpdateDrafts" type="button">破棄</button>
+                  <button class="primary-button small" id="saveUpdateSheet" type="button">保存して反映</button>
+                </div>
+              </div>
+              <div class="update-sheet-wrap">
+                <table class="update-sheet">
+                  <thead id="updateSheetHead"></thead>
+                  <tbody id="updateSheetBody"></tbody>
+                </table>
+              </div>
+              <div class="draft-review" id="draftReview"></div>
+            </section>
+
+            <div class="update-side">
+              <section class="panel mtg-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">MTG記録</p>
+                    <h2>MTG更新</h2>
+                  </div>
+                </div>
+                <form class="ops-form mtg-form" id="mtgOpsForm">
+                  <label class="form-field">
+                    <span>対象者</span>
+                    <select id="mtgMemberSelect"></select>
+                  </label>
+                  <div class="form-grid compact-grid">
+                    <label class="form-field">
+                      <span>実施日</span>
+                      <input id="mtgDate" type="date" value="2026-06-01" />
+                    </label>
+                    <label class="form-field">
+                      <span>結果</span>
+                      <select id="mtgResult">
+                        <option>継続</option>
+                        <option>改善傾向</option>
+                        <option>要フォロー</option>
+                        <option>完了</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label class="form-field">
+                    <span>今回の確認内容</span>
+                    <textarea id="mtgContent" rows="3">進捗状況と詰まりポイントを確認</textarea>
+                  </label>
+                  <label class="form-field">
+                    <span>次回までのアクション</span>
+                    <textarea id="mtgNextAction" rows="3">次回までに必要項目を完了</textarea>
+                  </label>
+                  <button class="primary-button" type="submit">MTGを登録</button>
+                </form>
+                <div class="meeting-list mtg-history" id="mtgOpsHistory"></div>
+              </section>
+
+              <section class="panel audit-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">保存履歴</p>
+                    <h2>更新ログ</h2>
+                  </div>
+                  <span class="pill" id="auditStatusPill">確認中</span>
+                </div>
+                <div class="audit-list" id="auditLogList"></div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="members">
+          <section class="panel member-admin-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Platform input</p>
+                <h2>受講生を追加</h2>
+              </div>
+              <span class="pill">会社ページを汚さない運用入力</span>
+            </div>
+            <form class="ops-form inline-member-form" id="addMemberForm">
+              <label class="form-field">
+                <span>氏名</span>
+                <input id="newMemberName" type="text" placeholder="例: 山田 太郎" required />
+              </label>
+              <label class="form-field">
+                <span>段階</span>
+                <select id="newMemberStage">
+                  <option>構築</option>
+                  <option>PR</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span>評価</span>
+                <select id="newMemberStatus">
+                  <option>F</option>
+                  <option>C</option>
+                  <option>B</option>
+                  <option>A</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span>進捗率</span>
+                <input id="newMemberProgress" type="number" min="0" max="100" value="0" />
+              </label>
+              <button class="primary-button" type="submit">追加</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Member management</p>
+                <h2>受講生一覧</h2>
+              </div>
+              <input id="searchInput" type="search" placeholder="名前で検索" />
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>受講生</th>
+                    <th>段階</th>
+                    <th>評価</th>
+                    <th>進捗率</th>
+                    <th>直近の詰まり</th>
+                    <th>推奨アクション</th>
+                    <th class="member-actions-col">管理</th>
+                  </tr>
+                </thead>
+                <tbody id="memberTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+      </main>
+    </div>
+    <div class="detail-overlay" id="detailOverlay" aria-hidden="true">
+      <section class="detail-drawer" role="dialog" aria-modal="true" aria-labelledby="detailName">
+        <div class="detail-header">
+          <div>
+            <p class="eyebrow">受講生詳細</p>
+            <h2 id="detailName">受講生詳細</h2>
+            <p class="subtext" id="detailMeta"></p>
+          </div>
+          <div class="detail-actions">
+            <button class="ghost-button" id="detailUpdateJump" type="button">更新タブで編集</button>
+            <button class="icon-button" id="detailClose" type="button" aria-label="閉じる">×</button>
+          </div>
+        </div>
+
+        <div class="detail-action-board" id="detailActionBoard"></div>
+
+        <div class="detail-account-panel" id="detailAccountPanel"></div>
+
+        <div class="detail-kpis" id="detailKpis"></div>
+
+        <div class="detail-section">
+          <div class="panel-header compact">
+            <div>
+              <p class="eyebrow">Completion map</p>
+              <h3>できていること / できていないこと</h3>
+            </div>
+            <span class="pill" id="completionPill">0%</span>
+          </div>
+          <div class="completion-grid" id="completionGrid"></div>
+        </div>
+
+        <div class="detail-section detail-inputs">
+          <div class="panel-header compact">
+            <div>
+              <p class="eyebrow">Quick edit</p>
+              <h3>この受講生を更新</h3>
+            </div>
+          </div>
+          <div class="detail-edit-grid">
+            <form class="ops-form" id="detailMeetingForm">
+              <h3>MTGを追加</h3>
+              <div class="form-grid compact-grid">
+                <label class="form-field">
+                  <span>日付</span>
+                  <input id="detailMeetingDate" type="date" value="2026-06-01" />
+                </label>
+                <label class="form-field">
+                  <span>結果</span>
+                  <select id="detailMeetingResult">
+                    <option>継続</option>
+                    <option>改善傾向</option>
+                    <option>要フォロー</option>
+                    <option>完了</option>
+                  </select>
+                </label>
+              </div>
+              <label class="form-field">
+                <span>内容・次アクション</span>
+                <textarea id="detailMeetingMemo" rows="3">次回までの改善方針を確認</textarea>
+              </label>
+              <button class="primary-button" type="submit">追加</button>
+            </form>
+
+            <form class="ops-form" id="detailMetricForm">
+              <h3>数字を更新</h3>
+              <div class="form-grid compact-grid">
+                <label class="form-field">
+                  <span>フォロワー</span>
+                  <input id="detailFollowers" type="number" min="0" value="350" />
+                </label>
+                <label class="form-field">
+                  <span>売上</span>
+                  <input id="detailSales" type="number" min="0" value="0" />
+                </label>
+              </div>
+              <button class="primary-button" type="submit">更新</button>
+            </form>
+
+            <form class="ops-form" id="detailStatusForm">
+              <h3>評価を更新</h3>
+              <div class="form-grid compact-grid">
+                <label class="form-field">
+                  <span>段階</span>
+                  <select id="detailStage">
+                    <option>構築</option>
+                    <option>PR</option>
+                  </select>
+                </label>
+                <label class="form-field">
+                  <span>評価</span>
+                  <select id="detailStatus">
+                    <option>A</option>
+                    <option>B</option>
+                    <option>C</option>
+                    <option>F</option>
+                  </select>
+                </label>
+                <label class="form-field">
+                  <span>進捗率</span>
+                  <input id="detailProgress" type="number" min="0" max="100" value="50" />
+                </label>
+              </div>
+              <button class="primary-button" type="submit">保存</button>
+            </form>
+
+            <form class="ops-form" id="detailMilestoneForm">
+              <h3>達成項目を更新</h3>
+              <div class="milestone-checks" id="detailMilestoneChecks"></div>
+              <button class="primary-button" type="submit">項目を保存</button>
+            </form>
+
+            <form class="ops-form" id="detailClientMemoForm">
+              <h3>クライアント向けメモ</h3>
+              <label class="form-field">
+                <span>共有メモ</span>
+                <textarea id="detailClientMemo" rows="3">次回報告で共有する要点を記載</textarea>
+              </label>
+              <button class="primary-button" type="submit">メモ保存</button>
+            </form>
+          </div>
+          <div class="operation-feed detail-feed" id="detailUpdateFeed"></div>
+        </div>
+
+        <div class="detail-section">
+          <div class="panel-header compact">
+            <div>
+              <p class="eyebrow">Follower trend</p>
+              <h3>フォロワー数の推移</h3>
+            </div>
+            <span class="pill" id="followerTrendVerdict">判定</span>
+          </div>
+          <div class="mini-chart" id="followerChart"></div>
+        </div>
+
+        <div class="detail-section">
+          <div class="panel-header compact">
+            <div>
+              <p class="eyebrow">Sales trend</p>
+              <h3>売上の推移</h3>
+            </div>
+            <span class="pill" id="salesTrendVerdict">判定</span>
+          </div>
+          <div class="mini-chart sales" id="salesChart"></div>
+        </div>
+
+        <div class="detail-section">
+          <div class="panel-header compact">
+            <div>
+              <p class="eyebrow">Coaching log</p>
+              <h3>MTG履歴</h3>
+            </div>
+          </div>
+          <div class="meeting-list" id="meetingList"></div>
+        </div>
+      </section>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

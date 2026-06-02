@@ -1,0 +1,27 @@
+.DS_Store
+.env
+.env.*
+!.env.production.example
+
+# Runtime/private data
+db/
+backups/
+google_sheets_xlsx/
+data.js
+data-summary.json
+__pycache__/
+*.pyc
+
+# Credentials and client distribution materials
+login-credentials.md
+client-distribution-credentials.md
+internal-admin-credentials.md
+
+# Generated reports/assets not needed for production deploy
+manuals/
+*.png
+latest-google-sheets-sync-report.md
+latest-sheet-reconciliation-report.md
+
+# Local dependency folders
+node_modules/
