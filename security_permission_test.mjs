@@ -22,8 +22,7 @@ async function login(loginId, password, companyId) {
   const response = await request("/api/companies", {
     method: "GET",
     headers: {
-      "x-portal-id": loginId,
-      "x-portal-key": password,
+      "x-portal-auth": Buffer.from(`${loginId}:${password}`).toString("base64"),
       "x-company-id": companyId || ""
     }
   });

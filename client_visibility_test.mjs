@@ -30,8 +30,7 @@ async function login(loginId, password) {
   const response = await request("/api/companies", {
     method: "GET",
     headers: {
-      "x-portal-id": loginId,
-      "x-portal-key": password
+      "x-portal-auth": Buffer.from(`${loginId}:${password}`).toString("base64")
     }
   });
   assert(response.status === 200, `${loginId}: login failed ${response.status}`);
