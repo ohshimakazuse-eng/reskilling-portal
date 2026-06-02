@@ -239,7 +239,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-03-session-route", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-03-companies-auth-route", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
