@@ -238,7 +238,7 @@ async function handleApi(request, response, pathname) {
     return true;
   }
 
-  if (pathname === "/api/login" && request.method === "POST") {
+  if ((pathname === "/api/login" || pathname === "/api/auth/login") && request.method === "POST") {
     const body = await readJsonBody(request);
     const { db, companies } = await hydratedCompaniesForSession();
     const resolved = resolveLogin(body, companies);
