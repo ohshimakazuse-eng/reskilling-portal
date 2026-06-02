@@ -243,7 +243,7 @@ async function handleApi(request, response, pathname) {
     return true;
   }
 
-  if ((pathname === "/api/login" || pathname === "/api/auth/login" || pathname === "/api/session") && request.method === "POST") {
+  if ((pathname === "/api/login" || pathname === "/api/auth/login" || pathname === "/api/session" || pathname === "/api/sessions") && request.method === "POST") {
     const body = await readJsonBody(request);
     const { db, companies } = await hydratedCompaniesForSession();
     const resolved = resolveLogin(body, companies);
