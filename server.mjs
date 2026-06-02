@@ -238,7 +238,12 @@ async function handleApi(request, response, pathname) {
     return true;
   }
 
-  if ((pathname === "/api/login" || pathname === "/api/auth/login") && request.method === "POST") {
+  if (pathname === "/api/version" && request.method === "GET") {
+    sendJson(response, 200, { ok: true, version: "2026-06-03-session-route", commit: process.env.RENDER_GIT_COMMIT || "" });
+    return true;
+  }
+
+  if ((pathname === "/api/login" || pathname === "/api/auth/login" || pathname === "/api/session") && request.method === "POST") {
     const body = await readJsonBody(request);
     const { db, companies } = await hydratedCompaniesForSession();
     const resolved = resolveLogin(body, companies);
