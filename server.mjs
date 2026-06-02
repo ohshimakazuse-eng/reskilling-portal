@@ -37,6 +37,7 @@ const clientLoginAliases = {
   recrea: "レクレア",
   rower: "ローワー"
 };
+const defaultMonths = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 
 const demoUsers = {
   admin: { loginId: "admin", email: "admin@reskilling.local", password: adminPassword, role: "admin", name: "自社管理者", canViewAll: true, canEdit: true },
@@ -208,7 +209,7 @@ async function initialData() {
     return JSON.parse(match[1]);
   } catch {
     return {
-      months: ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"],
+      months: defaultMonths,
       companies: []
     };
   }
@@ -251,8 +252,10 @@ async function writeStoreDb(db) {
 }
 
 async function hydratedCompaniesForSession(session = null) {
-  const db = await readDb();
   const normalizedDb = await readStoreDb();
+  const db = isSupabaseConfigured()
+    ? { months: defaultMonths, companies: [], auditLogs: [] }
+    : await readDb();
   const companies = hydrateLegacyCompanies(normalizedDb, db.months, db.companies);
   return {
     db,
