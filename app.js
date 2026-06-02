@@ -639,7 +639,7 @@ function loginUser(role, companyId) {
 async function loginWithApiOrLocal(role, companyId, email, password) {
   if (apiAvailable()) {
     try {
-      const response = await fetch("/api/sessions", {
+      const response = await fetch("/api/companies", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ companyId, loginId: email, email, password })

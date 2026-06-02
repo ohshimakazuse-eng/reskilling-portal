@@ -27,7 +27,7 @@ function assert(condition, message) {
 }
 
 async function login(loginId, password) {
-  const response = await request("/api/sessions", {
+  const response = await request("/api/companies", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ loginId, password })
