@@ -357,6 +357,42 @@ select:disabled {
   gap: 16px;
 }
 
+.period-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.period-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff, #f6fafb);
+  box-shadow: var(--shadow-soft);
+}
+
+.period-card span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.period-card strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.period-card small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2734,6 +2770,7 @@ td {
   .company-grid,
   .detail-kpis,
   .exec-insights,
+  .period-strip,
   .progress-editor-grid,
   .donut-row {
     grid-template-columns: 1fr;
@@ -2929,6 +2966,7 @@ td {
   }
 
   .panel,
+  .period-card,
   .focus-card,
   .exec-main,
   .detail-section,
@@ -3234,6 +3272,7 @@ td {
   }
 
   .company-card,
+  .period-card,
   .focus-card,
   .panel {
     padding: 12px;

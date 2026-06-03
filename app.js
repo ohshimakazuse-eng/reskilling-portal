@@ -155,8 +155,11 @@ function apiAvailable() {
 function savePlatformData(summary = "platform save") {
   if (!roleCanEdit()) return;
   try {
+    const now = new Date().toISOString();
+    state.platformUpdatedAt = now;
+    if (selectedCompany()) selectedCompany().lastUpdatedAt = now;
     localStorage.setItem(PLATFORM_STORAGE_KEY, JSON.stringify({
-      savedAt: new Date().toISOString(),
+      savedAt: now,
       sourceSignature: importedDataSignature,
       companies: companyData
     }));
@@ -193,6 +196,7 @@ async function hydratePlatformDataFromApi() {
     const payload = await authedResponse.json();
     if (!Array.isArray(payload.companies)) return;
     companyData = payload.companies;
+    state.platformUpdatedAt = payload.updatedAt || "";
     if (Array.isArray(payload.months)) months = payload.months;
     if (payload.permissions) state.session.permissions = payload.permissions;
     ensureMonthlyScheduleState();
@@ -262,6 +266,7 @@ function ensureHistoryLength(values, fallback = 0) {
 }
 
 function resetMemberForMonth(member, monthKey) {
+  const now = new Date().toISOString();
   const detail = memberDetail(member);
   member.salesHistory = ensureHistoryLength(detail.sales, 0);
   member.salesHistory[member.salesHistory.length - 1] = 0;
@@ -270,14 +275,17 @@ function resetMemberForMonth(member, monthKey) {
     member[key] = false;
   });
   member.monthlyPeriod = monthKey;
-  member.monthlyResetAt = new Date().toISOString();
+  member.monthlyResetAt = now;
+  member.lastUpdatedAt = now;
   member.autoConclusion = generateMemberAutoConclusion(member);
 }
 
 function resetCompanyForMonth(company, monthKey) {
+  const now = new Date().toISOString();
   (company.members || []).forEach((member) => resetMemberForMonth(member, monthKey));
   company.monthlyPeriod = monthKey;
-  company.monthlyResetAt = new Date().toISOString();
+  company.monthlyResetAt = now;
+  company.lastUpdatedAt = now;
   recalcCompanyStats(company);
 }
 
@@ -290,6 +298,7 @@ function resetCurrentMonthNumbers({ force = false, persist = false } = {}) {
     if (force || company.monthlyPeriod !== monthKey) resetCompanyForMonth(company, monthKey);
   });
   localStorage.setItem(MONTHLY_RESET_STORAGE_KEY, monthKey);
+  state.platformUpdatedAt = new Date().toISOString();
   addOperation("月次リセット", `${monthKey} を0で開始`, "当月売上・当月1000達成を0から開始");
   if (persist) persistAndRefresh(null, `${monthKey}: 月初リセット`);
   return true;
@@ -343,6 +352,7 @@ const state = {
   companySort: { key: "enrollment", direction: "desc" },
   activeMemberName: "",
   mtgMemberName: "",
+  platformUpdatedAt: "",
   updateDrafts: {},
   detailFeed: [],
   operationFeed: [
@@ -351,6 +361,40 @@ const state = {
     { type: "MTG", company: "株式会社Rower", title: "PRフェーズ受講生の改善MTGを登録", detail: "次回までにPR動画の構成を修正", time: "2026/06/01 11:15" }
   ]
 };
+
+function formatDate(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "未登録";
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+}
+
+function formatMonthLabel(monthKey = currentMonthKey()) {
+  const [year, month] = String(monthKey).split("-");
+  return `${year}年${Number(month)}月`;
+}
+
+function monthStartDateLabel(monthKey = currentMonthKey()) {
+  const [year, month] = String(monthKey).split("-");
+  return `${year}/${String(month).padStart(2, "0")}/01`;
+}
+
+function latestUpdateForCompanies(list = companies()) {
+  const values = [
+    state.platformUpdatedAt,
+    ...list.flatMap((company) => [
+      company.lastUpdatedAt,
+      company.updatedAt,
+      company.monthlyResetAt,
+      ...(company.members || []).flatMap((member) => [member.lastUpdatedAt, member.monthlyResetAt])
+    ])
+  ].filter(Boolean).map((value) => new Date(value)).filter((date) => !Number.isNaN(date.getTime()));
+  if (!values.length) return "";
+  return new Date(Math.max(...values.map((date) => date.getTime()))).toISOString();
+}
 
 function buildGeneratedMembers(company) {
   const count = currentEnrollment(company);
@@ -733,7 +777,7 @@ function applyRolePermissions() {
   if (companyCreatePanel) companyCreatePanel.style.display = roleCanManageCompanies() ? "" : "none";
   if (detailInputs) detailInputs.style.display = canUseDetailQuickEdit ? "" : "none";
   if (detailUpdateJump) detailUpdateJump.style.display = canEdit ? "" : "none";
-  if (monthlyResetButton) monthlyResetButton.style.display = canEdit ? "" : "none";
+  if (monthlyResetButton) monthlyResetButton.style.display = "none";
   $$("#saveUpdateSheet, #discardUpdateDrafts").forEach((button) => {
     button.style.display = canEdit ? "" : "none";
   });
@@ -851,6 +895,35 @@ function renderAdminCommandTop() {
   `;
   bindMemberLinks();
   bindCompanyJumps();
+}
+
+function periodCard(label, value, caption = "") {
+  return `
+    <article class="period-card">
+      <span>${label}</span>
+      <strong>${value}</strong>
+      ${caption ? `<small>${caption}</small>` : ""}
+    </article>
+  `;
+}
+
+function renderPeriodStrip(targetSelector, list) {
+  const target = $(targetSelector);
+  if (!target) return;
+  const monthKey = currentMonthKey();
+  const latest = latestUpdateForCompanies(list);
+  const staleCount = list.filter((company) => company.monthlyPeriod && company.monthlyPeriod !== monthKey).length;
+  target.innerHTML = [
+    periodCard("今日", formatDate(new Date()), "現在の日付"),
+    periodCard("対象月", formatMonthLabel(monthKey), staleCount ? `${staleCount}社が月替わり対象` : "当月データを表示"),
+    periodCard("今月開始日", monthStartDateLabel(monthKey), "月替わり時に当月数字を0開始"),
+    periodCard("最終更新日", latest ? formatDate(latest) : "未登録", latest ? "保存・同期・月次処理の最新日" : "まだ保存履歴がありません")
+  ].join("");
+}
+
+function renderPeriodStrips() {
+  renderPeriodStrip("#adminPeriodStrip", companies());
+  renderPeriodStrip("#companyPeriodStrip", [selectedCompany()].filter(Boolean));
 }
 
 function kpiData() {
@@ -2635,7 +2708,9 @@ function renderAll() {
     renderAuthShell();
     return;
   }
+  ensureMonthlyScheduleState();
   renderShell();
+  renderPeriodStrips();
   renderAdminCommandTop();
   renderCompanyGrid();
   renderCompanyTable();
