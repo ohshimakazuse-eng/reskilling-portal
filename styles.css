@@ -2782,9 +2782,25 @@ td {
 }
 
 @media (max-width: 680px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   body {
     background: #f6f8fc;
     font-size: 14px;
+  }
+
+  body * {
+    max-width: 100%;
+  }
+
+  .table-wrap *,
+  .update-sheet-wrap * {
+    max-width: none;
   }
 
   .app-shell {
@@ -2792,7 +2808,10 @@ td {
   }
 
   .main {
+    width: 100%;
+    max-width: 100vw;
     padding: 12px 12px 28px;
+    overflow-x: hidden;
   }
 
   .sidebar {
@@ -2803,6 +2822,7 @@ td {
     padding: 10px 12px 12px;
     gap: 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    overflow: hidden;
   }
 
   .brand {
@@ -2830,6 +2850,7 @@ td {
     overflow-x: auto;
     padding-bottom: 2px;
     scrollbar-width: none;
+    max-width: 100%;
   }
 
   .nav-tabs::-webkit-scrollbar {
@@ -2857,6 +2878,7 @@ td {
     gap: 14px;
     margin-bottom: 14px;
     padding-bottom: 14px;
+    overflow: hidden;
   }
 
   .eyebrow {
@@ -2888,6 +2910,7 @@ td {
     gap: 8px;
     align-items: stretch;
     justify-content: stretch;
+    min-width: 0;
   }
 
   .top-actions label {
@@ -2915,6 +2938,8 @@ td {
     padding: 14px;
     border-radius: 8px;
     box-shadow: none;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .panel-header {
@@ -2935,6 +2960,7 @@ td {
   .number-board .focus-facts,
   .company-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
   }
 
   .number-board .focus-facts div:nth-child(3) {
@@ -2961,6 +2987,16 @@ td {
   .company-card {
     min-height: auto;
     padding: 12px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .focus-member > *,
+  .company-rank-row > *,
+  .company-card > *,
+  .company-card-head > *,
+  .company-metrics > * {
+    min-width: 0;
   }
 
   .company-card-head {
@@ -2996,13 +3032,25 @@ td {
   }
 
   .line-chart {
-    min-width: 560px;
+    min-width: 0;
     min-height: 190px;
+    gap: 4px;
+    padding-inline: 4px;
+  }
+
+  .bar-wrap {
+    min-width: 0;
+    font-size: 10px;
+  }
+
+  .bar {
+    min-width: 10px;
   }
 
   .table-wrap,
   .update-sheet-wrap,
   .detail-section {
+    width: 100%;
     max-width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -3098,8 +3146,28 @@ td {
 
   .detail-drawer {
     width: 100%;
+    max-width: 100vw;
     height: 100dvh;
     padding: 12px;
+    overflow-x: hidden;
+  }
+
+  .mini-chart {
+    min-width: 0;
+    grid-template-columns: repeat(11, minmax(0, 1fr));
+  }
+
+  .mini-bar-wrap {
+    min-width: 0;
+    font-size: 10px;
+  }
+
+  .mini-bar-wrap span {
+    max-width: 100%;
+  }
+
+  .mini-bar {
+    min-width: 8px;
   }
 
   .detail-header {
@@ -3118,6 +3186,7 @@ td {
   .account-link-card {
     grid-template-columns: 1fr;
     align-items: start;
+    min-width: 0;
   }
 
   .account-open-button {
@@ -3127,12 +3196,24 @@ td {
   .company-create-form,
   .inline-member-form {
     grid-template-columns: 1fr;
+    min-width: 0;
   }
 
   .primary-button,
   .ghost-button,
   .danger-button {
     width: 100%;
+    min-width: 0;
+  }
+
+  select,
+  input[type="search"],
+  input[type="date"],
+  input[type="number"],
+  input[type="text"],
+  textarea {
+    width: 100%;
+    min-width: 0;
   }
 }
 
