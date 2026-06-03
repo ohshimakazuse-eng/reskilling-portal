@@ -11,7 +11,7 @@ const CLIENT_LOGIN_ALIASES = {
   rower: "ローワー"
 };
 const importedCompanyData = window.RESKILLING_DATA?.companies || fallbackCompanyData;
-let months = window.RESKILLING_DATA?.months || ["1月", "2月", "3月", "4月", "5月", "6月", "8月", "9月", "10月", "11月", "12月"];
+let months = window.RESKILLING_DATA?.months || ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 const milestoneLabels = [
   ["daily", "毎日投稿"],
   ["orient", "オリエン"],
