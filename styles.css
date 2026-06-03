@@ -2780,3 +2780,381 @@ td {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 680px) {
+  body {
+    background: #f6f8fc;
+    font-size: 14px;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .main {
+    padding: 12px 12px 28px;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    height: auto;
+    padding: 10px 12px 12px;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  }
+
+  .brand {
+    gap: 9px;
+  }
+
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
+  }
+
+  .brand p {
+    font-size: 14px;
+  }
+
+  .brand span,
+  .sidebar-note {
+    display: none;
+  }
+
+  .nav-tabs {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab {
+    flex: 0 0 auto;
+    min-height: 38px;
+    border-radius: 999px;
+    padding: 0 13px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .nav-tab.active::before {
+    content: none;
+  }
+
+  .nav-tab:hover {
+    transform: none;
+  }
+
+  .topbar {
+    gap: 14px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+  }
+
+  .eyebrow {
+    font-size: 10px;
+  }
+
+  h1 {
+    font-size: 25px;
+    line-height: 1.18;
+  }
+
+  h2 {
+    font-size: 17px;
+  }
+
+  h3 {
+    font-size: 15px;
+  }
+
+  .page-lead {
+    margin-top: 7px;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .top-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .top-actions label {
+    min-width: 0;
+  }
+
+  .top-actions select,
+  .top-actions button,
+  .top-logout,
+  .monthly-reset-button {
+    width: 100%;
+  }
+
+  .view.active {
+    gap: 12px;
+  }
+
+  .panel,
+  .focus-card,
+  .exec-main,
+  .detail-section,
+  .detail-account-panel,
+  .detail-score-panel,
+  .next-action-panel {
+    padding: 14px;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+
+  .panel-header {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .kpi-card {
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .kpi-value {
+    font-size: 25px;
+  }
+
+  .focus-facts,
+  .number-board .focus-facts,
+  .company-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .number-board .focus-facts div:nth-child(3) {
+    grid-column: auto;
+    min-height: 74px;
+  }
+
+  .focus-facts strong,
+  .number-board .focus-facts strong,
+  .number-board .focus-facts div:nth-child(3) strong {
+    font-size: 20px;
+  }
+
+  .split-sales {
+    grid-template-columns: 1fr;
+  }
+
+  .split-sales b {
+    font-size: 14px;
+  }
+
+  .focus-member,
+  .company-rank-row,
+  .company-card {
+    min-height: auto;
+    padding: 12px;
+  }
+
+  .company-card-head {
+    align-items: flex-start;
+  }
+
+  .company-card-head strong {
+    white-space: normal;
+  }
+
+  .company-metrics span {
+    min-height: 52px;
+    padding: 8px;
+  }
+
+  .company-metrics b {
+    font-size: 18px;
+  }
+
+  .exec-message {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .insight-card {
+    min-height: auto;
+    padding: 13px;
+  }
+
+  .donut {
+    width: min(180px, 58vw);
+    justify-self: center;
+  }
+
+  .line-chart {
+    min-width: 560px;
+    min-height: 190px;
+  }
+
+  .table-wrap,
+  .update-sheet-wrap,
+  .detail-section {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrap::before,
+  .update-sheet-wrap::before {
+    content: "横にスクロールできます";
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    display: block;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    background: #f8fbff;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 850;
+  }
+
+  table {
+    min-width: 720px;
+  }
+
+  .admin-table {
+    min-width: 680px;
+  }
+
+  th,
+  td,
+  .admin-table th,
+  .admin-table td {
+    padding: 10px 9px;
+    font-size: 12px;
+  }
+
+  .admin-table th:first-child,
+  .admin-table td:first-child {
+    min-width: 136px;
+    max-width: 156px;
+  }
+
+  .member-link {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .update-layout {
+    gap: 12px;
+  }
+
+  .ops-hero {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .ops-hero h2 {
+    font-size: 18px;
+  }
+
+  .ops-hero p:not(.eyebrow) {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .ops-steps {
+    width: 100%;
+    gap: 6px;
+  }
+
+  .ops-steps span {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .update-sheet-wrap {
+    max-height: 62vh;
+  }
+
+  .update-sheet {
+    min-width: 1680px;
+  }
+
+  .sheet-name {
+    width: 160px;
+  }
+
+  .account-input,
+  .sheet-memo {
+    width: 190px;
+  }
+
+  .detail-drawer {
+    width: 100%;
+    height: 100dvh;
+    padding: 12px;
+  }
+
+  .detail-header {
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 14px;
+  }
+
+  .detail-action-board,
+  .detail-kpis,
+  .detail-edit-grid,
+  .completion-grid {
+    gap: 10px;
+  }
+
+  .account-link-card {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .account-open-button {
+    width: 100%;
+  }
+
+  .company-create-form,
+  .inline-member-form {
+    grid-template-columns: 1fr;
+  }
+
+  .primary-button,
+  .ghost-button,
+  .danger-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .main {
+    padding-inline: 10px;
+  }
+
+  .top-actions,
+  .focus-facts,
+  .number-board .focus-facts,
+  .company-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-value {
+    font-size: 23px;
+  }
+
+  .company-card,
+  .focus-card,
+  .panel {
+    padding: 12px;
+  }
+}
