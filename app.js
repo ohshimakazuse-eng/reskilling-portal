@@ -401,7 +401,7 @@ function buildGeneratedMembers(company) {
   return Array.from({ length: count }, (_, index) => {
     const stage = index < company.prCount ? "PR" : "構築";
     const base = Math.max(8, Math.min(92, company.healthSeed + ((index % 7) - 3) * 6));
-    const status = base >= 80 ? "A" : base >= 60 ? "B" : base >= 45 ? "C" : "F";
+    const status = base >= 80 ? "A" : base >= 60 ? "B" : "F";
     return {
       name: `${company.name.replace("株式会社", "")} 受講生${String(index + 1).padStart(2, "0")}`,
       status,
@@ -1161,7 +1161,7 @@ function renderStageDonut(pr, build, total) {
 }
 
 function renderStatusTable(counts, total) {
-  const order = ["S", "A", "B", "C", "F"];
+  const order = ["S", "A", "B", "F"];
   $("#statusTable").innerHTML = order.map((status) => {
     const count = counts[status] || 0;
     const rate = total ? Math.round((count / total) * 100) : 0;
