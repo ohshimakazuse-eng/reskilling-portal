@@ -1,20 +1,20 @@
 :root {
-  --bg: #f5f7fb;
+  --bg: #eef3f8;
   --surface: #ffffff;
-  --surface-2: #f9fbff;
-  --ink: #111827;
-  --muted: #647084;
-  --line: #d8e0ec;
-  --accent: #2357d6;
-  --accent-2: #159a63;
-  --warn: #c46a02;
-  --danger: #d33a2c;
-  --soft-blue: #e9f0ff;
-  --soft-green: #e7f7ef;
-  --soft-red: #fdeceb;
-  --soft-yellow: #fff4d8;
-  --shadow: 0 18px 44px rgba(17, 24, 39, 0.08);
-  --shadow-soft: 0 8px 22px rgba(17, 24, 39, 0.06);
+  --surface-2: #f4f8fb;
+  --ink: #0d1b2a;
+  --muted: #526579;
+  --line: #c8d4e0;
+  --accent: #0e5f88;
+  --accent-2: #1f8f6a;
+  --warn: #b45f06;
+  --danger: #bd2f2a;
+  --soft-blue: #dcecf4;
+  --soft-green: #ddf1e9;
+  --soft-red: #f9e1df;
+  --soft-yellow: #f8ebc9;
+  --shadow: 0 18px 44px rgba(13, 27, 42, 0.11);
+  --shadow-soft: 0 8px 22px rgba(13, 27, 42, 0.08);
 }
 
 * {
@@ -24,7 +24,7 @@
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, #eef3fb 0, #f8fafc 260px, var(--bg) 520px),
+    linear-gradient(180deg, #dce8f0 0, #f5f8fb 260px, var(--bg) 520px),
     var(--bg);
   color: var(--ink);
   font-family: Inter, "Noto Sans JP", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -125,8 +125,8 @@ select {
   height: 100vh;
   padding: 22px 18px;
   background:
-    linear-gradient(180deg, rgba(35, 87, 214, 0.18), rgba(21, 154, 99, 0.05)),
-    #111827;
+    linear-gradient(180deg, rgba(21, 96, 130, 0.24), rgba(31, 143, 106, 0.12)),
+    #0d1b2a;
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -146,7 +146,7 @@ select {
   display: grid;
   place-items: center;
   background:
-    linear-gradient(135deg, #ffffff, #e6edff);
+    linear-gradient(135deg, #ffffff, #d9edf3);
   color: var(--accent);
   font-weight: 900;
   letter-spacing: 0;
@@ -1145,11 +1145,11 @@ button.simple-row:hover {
   min-width: 18px;
   max-width: 42px;
   border-radius: 6px 6px 0 0;
-  background: linear-gradient(180deg, #1663ff, #6aa1ff);
+  background: linear-gradient(180deg, #0e5f88, #78b8d0);
 }
 
 .bar.current {
-  background: linear-gradient(180deg, #18a058, #72d49b);
+  background: linear-gradient(180deg, #1f8f6a, #83ccb0);
 }
 
 .bar.empty {
@@ -1158,7 +1158,7 @@ button.simple-row:hover {
 }
 
 .bar.current.empty {
-  background: linear-gradient(180deg, #18a058, #72d49b);
+  background: linear-gradient(180deg, #1f8f6a, #83ccb0);
   opacity: 0.45;
 }
 
@@ -1409,7 +1409,7 @@ button.simple-row:hover {
 }
 
 .primary-button:hover {
-  background: #1b49bd;
+  background: #0a4d70;
 }
 
 .primary-button.small {
@@ -1718,13 +1718,13 @@ td {
 
 .update-sheet th {
   z-index: 3;
-  background: #eef4ff;
-  color: #31405a;
+  background: #e4eef3;
+  color: #233545;
 }
 
 .update-sheet .sheet-group-row th {
   top: 0;
-  background: #e3edff;
+  background: #d6e7ef;
   color: #172033;
   text-align: center;
   font-weight: 900;
@@ -2314,7 +2314,7 @@ td {
 }
 
 .account-open-button:hover {
-  background: #0e4bdd;
+  background: #0a4d70;
 }
 
 .account-link-card em {
@@ -2534,9 +2534,9 @@ td {
 .mini-chart {
   min-height: 190px;
   display: grid;
-  grid-template-columns: repeat(11, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   align-items: end;
-  gap: 8px;
+  gap: 7px;
   padding: 12px 4px 0;
   border-left: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -2564,14 +2564,14 @@ td {
 
 .mini-bar {
   width: 100%;
-  max-width: 34px;
-  min-width: 12px;
+  max-width: 30px;
+  min-width: 8px;
   border-radius: 6px 6px 0 0;
-  background: linear-gradient(180deg, #18a058, #77d49b);
+  background: linear-gradient(180deg, #1f8f6a, #79c6a8);
 }
 
 .mini-chart.sales .mini-bar {
-  background: linear-gradient(180deg, #1663ff, #8db5ff);
+  background: linear-gradient(180deg, #0e5f88, #75b6d0);
 }
 
 .meeting-list {
@@ -3154,12 +3154,12 @@ td {
 
   .mini-chart {
     min-width: 0;
-    grid-template-columns: repeat(11, minmax(0, 1fr));
+    grid-template-columns: repeat(12, minmax(0, 1fr));
   }
 
   .mini-bar-wrap {
     min-width: 0;
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .mini-bar-wrap span {
@@ -3167,7 +3167,7 @@ td {
   }
 
   .mini-bar {
-    min-width: 8px;
+    min-width: 6px;
   }
 
   .detail-header {
