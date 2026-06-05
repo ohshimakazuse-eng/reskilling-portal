@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { extname, join, resolve } from "node:path";
 import {
   applyLegacyCompaniesToNormalized,
@@ -31,6 +32,8 @@ const devAdminPassword = ["admin", "123"].join("");
 const devOperatorPassword = ["operator", "123"].join("");
 const adminPassword = process.env.ADMIN_PASSWORD || (isProduction ? "" : devAdminPassword);
 const operatorPassword = process.env.OPERATOR_PASSWORD || (isProduction ? "" : devOperatorPassword);
+const sessionSecret = process.env.SESSION_SECRET || adminPassword || operatorPassword || "reskilling-portal-local-session";
+const sessionTtlMs = 1000 * 60 * 60 * 24 * 30;
 const clientLoginAliases = {
   iberis: "イベリス",
   exceed: "エクシードキャリア",
@@ -103,9 +106,49 @@ function authToken(request) {
   return match ? match[1] : "";
 }
 
+function base64UrlEncode(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function base64UrlDecode(value) {
+  return Buffer.from(value, "base64url").toString("utf8");
+}
+
+function signSessionPayload(payload) {
+  return createHmac("sha256", sessionSecret).update(payload).digest("base64url");
+}
+
+function createSessionToken(session) {
+  const payload = base64UrlEncode(JSON.stringify(session));
+  const signature = signSessionPayload(payload);
+  return `${payload}.${signature}`;
+}
+
+function verifySessionToken(token) {
+  const [payload, signature] = String(token || "").split(".");
+  if (!payload || !signature) return null;
+  const expected = signSessionPayload(payload);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (signatureBuffer.length !== expectedBuffer.length || !timingSafeEqual(signatureBuffer, expectedBuffer)) return null;
+  try {
+    const session = JSON.parse(base64UrlDecode(payload));
+    if (session.expiresAt && Date.parse(session.expiresAt) < Date.now()) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
 function sessionFromRequest(request) {
   const token = authToken(request);
-  return token ? activeSessions.get(token) : null;
+  if (!token) return null;
+  const activeSession = activeSessions.get(token);
+  if (activeSession) return activeSession;
+  const verifiedSession = verifySessionToken(token);
+  if (!verifiedSession) return null;
+  activeSessions.set(token, verifiedSession);
+  return verifiedSession;
 }
 
 function requireSession(request, response) {
@@ -184,9 +227,7 @@ function loginBodyFromRequest(request) {
 
 function createLoginSession(body, companies, resolved) {
   const { user: demoUser, company } = resolved;
-  const token = crypto.randomUUID();
   const session = {
-    token,
     role: demoUser.role,
     companyId: demoUser.canViewAll ? body.companyId || company.id : company.id,
     companyIds: demoUser.canViewAll ? companies.map((item) => item.id) : [company.id],
@@ -195,8 +236,11 @@ function createLoginSession(body, companies, resolved) {
       canViewAll: demoUser.canViewAll,
       canEdit: demoUser.canEdit
     },
-    signedInAt: new Date().toISOString()
+    signedInAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + sessionTtlMs).toISOString()
   };
+  const token = createSessionToken(session);
+  session.token = token;
   activeSessions.set(token, session);
   return session;
 }

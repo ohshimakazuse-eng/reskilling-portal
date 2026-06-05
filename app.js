@@ -174,7 +174,11 @@ async function savePlatformData(summary = "platform save") {
           companies: companyData
         })
       });
-      if (!response.ok) throw new Error(`API save failed: ${response.status}`);
+      if (!response.ok) {
+        const error = new Error(`API save failed: ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
     }
     return true;
   } catch (error) {
@@ -1956,7 +1960,10 @@ async function applyUpdateDrafts() {
       companies: companyData
     }));
     renderAll();
-    window.alert("保存に失敗しました。通信状況を確認してから、もう一度「保存して反映」を押してください。");
+    const message = [401, 403].includes(error?.status)
+      ? "ログイン状態が切れています。再ログインしてから、もう一度「保存して反映」を押してください。"
+      : "保存に失敗しました。通信状況を確認してから、もう一度「保存して反映」を押してください。";
+    window.alert(message);
   } finally {
     if (saveButton) saveButton.textContent = originalSaveText;
     updateDraftStatus();
