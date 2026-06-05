@@ -714,12 +714,18 @@ function loginUser(role, companyId) {
 async function loginWithApiOrLocal(role, companyId, email, password) {
   if (apiAvailable()) {
     try {
-      const response = await fetch("/api/companies", {
-        method: "GET",
+      const response = await fetch("/api/login", {
+        method: "POST",
         headers: {
-          "x-portal-auth": btoa(`${email}:${password}`),
-          "x-company-id": companyId
-        }
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          role,
+          companyId,
+          loginId: email,
+          email,
+          password
+        })
       });
       if (!response.ok) return false;
       const payload = await response.json();
@@ -2547,18 +2553,35 @@ function bindEvents() {
 
   $("#loginForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submitButton = event.submitter || $("#loginForm button[type='submit']");
+    const originalText = submitButton?.textContent || "ログイン";
     const role = $("#loginRole").value;
-    const ok = await loginWithApiOrLocal(
-      role,
-      $("#loginCompany").value,
-      $("#loginEmail").value.trim(),
-      $("#loginPassword").value.trim()
-    );
-    if (!ok) {
-      $("#loginError").textContent = "IDまたはパスワードが違います。配布されたログイン情報を確認してください。";
-      return;
-    }
     $("#loginError").textContent = "";
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "ログイン中...";
+    }
+    try {
+      const ok = await loginWithApiOrLocal(
+        role,
+        $("#loginCompany").value,
+        $("#loginEmail").value.trim(),
+        $("#loginPassword").value.trim()
+      );
+      if (!ok) {
+        $("#loginError").textContent = "IDまたはパスワードが違います。配布されたログイン情報を確認してください。";
+        return;
+      }
+      $("#loginError").textContent = "";
+    } catch (error) {
+      console.warn("Login submit failed.", error);
+      $("#loginError").textContent = "ログイン処理に失敗しました。通信状況を確認して、もう一度押してください。";
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
+      }
+    }
   });
 
   $("#logoutButton").addEventListener("click", logoutUser);

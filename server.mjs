@@ -195,8 +195,9 @@ function clientSafePayload(value, session) {
 
 function resolveLogin(body, companies) {
   const loginId = String(body.loginId || body.email || "").trim().toLowerCase();
+  const loginMatchedUser = Object.values(demoUsers).find((user) => user.loginId === loginId || user.email === loginId);
   const explicitRole = body.role && demoUsers[body.role] ? body.role : null;
-  const demoUser = explicitRole ? demoUsers[explicitRole] : Object.values(demoUsers).find((user) => user.loginId === loginId || user.email === loginId);
+  const demoUser = loginMatchedUser || (explicitRole && !loginId ? demoUsers[explicitRole] : null);
   if (demoUser) {
     return demoUser.password && body.password === demoUser.password ? { user: demoUser, company: companies.find((item) => item.id === body.companyId) || companies[0] } : null;
   }
@@ -320,7 +321,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-03-companies-auth-route", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-05-login-save-fix", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
@@ -387,11 +388,11 @@ async function handleApi(request, response, pathname) {
     let saveResult;
     let updatedAt;
     companyWriteQueue = companyWriteQueue.then(async () => {
-      const db = await readDb();
+      const { db, normalizedDb, companies: currentCompanies } = await hydratedCompaniesForSession();
       const saveScope = body.scope === "all" ? "all" : "company";
       const scopedCompanyId = String(body.companyId || session.companyId || "");
       const incomingById = new Map(body.companies.map((company) => [company.id, company]));
-      let mergedCompanies = db.companies;
+      let mergedCompanies = currentCompanies;
       if (saveScope === "all") {
         if (!session.permissions.canViewAll) {
           const error = new Error("all-company save requires admin permission");
@@ -412,24 +413,25 @@ async function handleApi(request, response, pathname) {
           throw error;
         }
         const replaced = new Set();
-        mergedCompanies = db.companies.map((company) => {
+        mergedCompanies = currentCompanies.map((company) => {
           if (company.id !== scopedCompanyId) return company;
           replaced.add(company.id);
           return incomingCompany;
         });
         if (!replaced.has(scopedCompanyId)) mergedCompanies.push(incomingCompany);
       }
-      db.auditLogs.unshift({
-        id: crypto.randomUUID(),
-        action: saveScope === "all" ? "replace_companies" : "replace_company",
-        actor: session.name,
-        createdAt: new Date().toISOString(),
-        summary: body.summary || "frontend save",
-        companyId: saveScope === "company" ? scopedCompanyId : ""
-      });
-      db.companies = mergedCompanies;
-      await writeDb(db);
-      const normalizedDb = await readStoreDb();
+      if (!isSupabaseConfigured()) {
+        db.auditLogs.unshift({
+          id: crypto.randomUUID(),
+          action: saveScope === "all" ? "replace_companies" : "replace_company",
+          actor: session.name,
+          createdAt: new Date().toISOString(),
+          summary: body.summary || "frontend save",
+          companyId: saveScope === "company" ? scopedCompanyId : ""
+        });
+        db.companies = mergedCompanies;
+        await writeDb(db);
+      }
       applyLegacyCompaniesToNormalized(normalizedDb, mergedCompanies, session.name, body.summary || "frontend save");
       saveResult = await writeStoreDb(normalizedDb);
       updatedAt = saveResult?.updatedAt || normalizedDb.updatedAt;
