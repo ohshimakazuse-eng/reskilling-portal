@@ -128,6 +128,30 @@ async function upsertRows(config, table, conflict, rows, options = {}) {
   return count;
 }
 
+function rowsForCompanyScope(db, companyCodes = []) {
+  const codes = new Set(companyCodes.filter(Boolean));
+  if (!codes.size) return db.tables;
+  const tables = db.tables;
+  const companies = (tables.companies || []).filter((company) => codes.has(company.code));
+  const companyIds = new Set(companies.map((company) => company.id));
+  const members = (tables.members || []).filter((member) => companyIds.has(member.company_id));
+  const memberIds = new Set(members.map((member) => member.id));
+  return {
+    app_users: [],
+    companies,
+    company_users: (tables.company_users || []).filter((row) => companyIds.has(row.company_id)),
+    members,
+    member_accounts: (tables.member_accounts || []).filter((row) => memberIds.has(row.member_id)),
+    member_milestones: (tables.member_milestones || []).filter((row) => memberIds.has(row.member_id)),
+    member_metrics: (tables.member_metrics || []).filter((row) => memberIds.has(row.member_id)),
+    coaching_sessions: (tables.coaching_sessions || []).filter((row) => companyIds.has(row.company_id) || memberIds.has(row.member_id)),
+    company_monthly_summaries: (tables.company_monthly_summaries || []).filter((row) => companyIds.has(row.company_id)),
+    client_reports: (tables.client_reports || []).filter((row) => companyIds.has(row.company_id)),
+    update_batches: (tables.update_batches || []).slice(0, 3),
+    audit_logs: (tables.audit_logs || []).filter((row) => companyIds.has(row.company_id)).slice(0, 10)
+  };
+}
+
 export async function readSupabaseNormalizedDb() {
   const config = supabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
@@ -145,12 +169,15 @@ export async function readSupabaseNormalizedDb() {
   };
 }
 
-export async function writeSupabaseNormalizedDb(db) {
+export async function writeSupabaseNormalizedDb(db, writeOptions = {}) {
   const config = supabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
   const counts = {};
+  const scopedTables = writeOptions.scope === "company"
+    ? rowsForCompanyScope(db, writeOptions.companyCodes || [])
+    : db.tables;
   for (const [table, conflict] of tablePlan) {
-    const rows = db.tables[table] || [];
+    const rows = scopedTables[table] || [];
     const options = tableWriteOptions[table] || {};
     try {
       counts[table] = await upsertRows(config, table, conflict, rows, options);

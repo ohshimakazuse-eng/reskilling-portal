@@ -341,7 +341,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-05-audit-timeout-fix", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-05-fast-company-save", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
@@ -452,8 +452,14 @@ async function handleApi(request, response, pathname) {
         db.companies = mergedCompanies;
         await writeDb(db);
       }
-      applyLegacyCompaniesToNormalized(normalizedDb, mergedCompanies, session.name, body.summary || "frontend save");
-      saveResult = await writeStoreDb(normalizedDb);
+      const companiesToNormalize = saveScope === "company"
+        ? [incomingById.get(scopedCompanyId)]
+        : mergedCompanies;
+      applyLegacyCompaniesToNormalized(normalizedDb, companiesToNormalize, session.name, body.summary || "frontend save");
+      saveResult = await writeStoreDb(normalizedDb, {
+        scope: saveScope,
+        companyCodes: saveScope === "company" ? [scopedCompanyId] : []
+      });
       updatedAt = saveResult?.updatedAt || normalizedDb.updatedAt;
     });
     try {
