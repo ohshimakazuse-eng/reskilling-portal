@@ -1993,6 +1993,8 @@ async function applyUpdateDrafts() {
     if ([401, 403].includes(error?.status)) handleSessionExpired();
     const message = [401, 403].includes(error?.status)
       ? "ログイン状態が切れています。もう一度ログインしてから「保存して反映」を押してください。"
+      : error?.detail?.code === "database_unavailable"
+        ? "DBが一時的に応答していません。入力内容は画面に戻してあります。30秒ほど待ってから、もう一度「保存して反映」を押してください。"
       : `保存に失敗しました。少し待ってからもう一度「保存して反映」を押してください。${error?.detail?.message ? `\n理由: ${error.detail.message}` : ""}`;
     window.alert(message);
   } finally {

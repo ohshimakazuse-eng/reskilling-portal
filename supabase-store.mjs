@@ -36,14 +36,52 @@ function headers(config, extra = {}) {
   };
 }
 
-async function requestJson(config, path, options = {}) {
-  const response = await fetch(`${config.url}/rest/v1/${path}`, {
-    ...options,
-    headers: headers(config, options.headers || {})
-  });
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(status) {
+  return status === 429 || status === 521 || status === 522 || status === 523 || status === 524 || status >= 500;
+}
+
+function compactDetail(text) {
+  const value = String(text || "");
+  if (value.includes("Web server is down") || value.includes("cloudflare") || value.includes("<!DOCTYPE html>")) {
+    return "Supabase DBが一時的に応答していません。数十秒後にもう一度保存してください。";
+  }
+  return value.slice(0, 300);
+}
+
+async function requestJson(config, path, options = {}, attempt = 0) {
+  const maxAttempts = Number(options.maxAttempts || 4);
+  let response;
+  try {
+    response = await fetch(`${config.url}/rest/v1/${path}`, {
+      ...options,
+      headers: headers(config, options.headers || {})
+    });
+  } catch (error) {
+    if (attempt + 1 < maxAttempts) {
+      await wait(600 * (attempt + 1));
+      return requestJson(config, path, options, attempt + 1);
+    }
+    const wrapped = new Error("Supabase DBに接続できません。少し待ってから再度保存してください。");
+    wrapped.statusCode = 503;
+    wrapped.cause = error;
+    throw wrapped;
+  }
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`${options.method || "GET"} ${path} failed: ${response.status} ${detail}`);
+    if (isRetryableStatus(response.status) && attempt + 1 < maxAttempts) {
+      await wait(800 * (attempt + 1));
+      return requestJson(config, path, options, attempt + 1);
+    }
+    const error = new Error(`${options.method || "GET"} ${path} failed: ${response.status} ${compactDetail(detail)}`);
+    error.statusCode = isRetryableStatus(response.status) ? 503 : response.status;
+    error.publicMessage = isRetryableStatus(response.status)
+      ? "Supabase DBが一時的に応答していません。少し待ってから再度保存してください。"
+      : compactDetail(detail);
+    throw error;
   }
   if (response.status === 204) return null;
   const text = await response.text();

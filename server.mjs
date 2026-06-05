@@ -95,6 +95,26 @@ function sendJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
+function apiErrorPayload(error) {
+  const rawMessage = String(error?.publicMessage || error?.message || "Server error");
+  const isDbUnavailable = error?.statusCode === 503
+    || /Supabase|Web server is down|Cloudflare|521|522|523|524/i.test(rawMessage);
+  if (isDbUnavailable) {
+    return {
+      statusCode: 503,
+      payload: {
+        ok: false,
+        code: "database_unavailable",
+        message: "Supabase DBが一時的に応答していません。少し待ってから再度保存してください。"
+      }
+    };
+  }
+  return {
+    statusCode: error?.statusCode || 500,
+    payload: { ok: false, message: rawMessage.slice(0, 300) }
+  };
+}
+
 function shouldRedirectToHttps(request) {
   return process.env.FORCE_HTTPS === "true"
     && request.headers["x-forwarded-proto"]
@@ -321,7 +341,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-05-login-save-fix", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-05-db-retry-fix", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
@@ -440,7 +460,8 @@ async function handleApi(request, response, pathname) {
       await companyWriteQueue;
     } catch (error) {
       companyWriteQueue = Promise.resolve();
-      sendJson(response, error.statusCode || 500, { ok: false, message: error.message });
+      const { statusCode, payload } = apiErrorPayload(error);
+      sendJson(response, statusCode, payload);
       return true;
     }
     sendJson(response, 200, { ok: true, updatedAt, storage: storageName(), counts: saveResult?.counts });
@@ -594,7 +615,8 @@ const server = createServer(async (request, response) => {
       return;
     }
     console.error(error);
-    sendJson(response, 500, { ok: false, message: error.message });
+    const { statusCode, payload } = apiErrorPayload(error);
+    sendJson(response, statusCode, payload);
   }
 });
 
