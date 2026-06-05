@@ -3,6 +3,7 @@ const fallbackCompanyData = [];
 const PLATFORM_STORAGE_KEY = "reskilling-platform-data-v2";
 const SESSION_STORAGE_KEY = "reskilling-session-v1";
 const MONTHLY_RESET_STORAGE_KEY = "reskilling-monthly-reset-v1";
+const AUTO_REFRESH_INTERVAL_MS = 20000;
 const NON_CLIENT_COMPANY_IDS = new Set(["nh", "vv"]);
 const CLIENT_LOGIN_ALIASES = {
   iberis: "イベリス",
@@ -187,6 +188,7 @@ async function saveCompaniesToApi(payload, attempt = 0) {
 async function savePlatformData(summary = "platform save", options = {}) {
   if (!roleCanEdit()) return false;
   try {
+    state.isSaving = true;
     const now = new Date().toISOString();
     state.platformUpdatedAt = now;
     const company = selectedCompany();
@@ -211,13 +213,39 @@ async function savePlatformData(summary = "platform save", options = {}) {
   } catch (error) {
     console.warn("Platform data could not be saved in this browser.", error);
     throw error;
+  } finally {
+    state.isSaving = false;
   }
 }
 
-async function hydratePlatformDataFromApi() {
+function hasUnsavedDrafts() {
+  return Object.keys(state.updateDrafts || {}).length > 0;
+}
+
+function isEditingField() {
+  const tag = document.activeElement?.tagName;
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
+}
+
+function canRefreshPlatformData(options = {}) {
+  if (options.force) return true;
+  if (!state.session?.token || state.isSaving || state.isRefreshing) return false;
+  if (hasUnsavedDrafts()) return false;
+  if (activeViewId() === "updates" && isEditingField()) return false;
+  return true;
+}
+
+async function hydratePlatformDataFromApi(options = {}) {
   if (!apiAvailable() || !state.session?.token) return;
+  if (!canRefreshPlatformData(options)) return;
+  state.isRefreshing = true;
   try {
-    const authedResponse = await fetch("/api/companies", { headers: authHeaders() });
+    const wasDetailOpen = $("#detailOverlay")?.classList.contains("open");
+    const activeName = state.activeMemberName;
+    const authedResponse = await fetch("/api/companies", {
+      cache: "no-store",
+      headers: authHeaders({ "cache-control": "no-cache" })
+    });
     if (!authedResponse.ok) {
       if ([401, 403].includes(authedResponse.status)) {
         handleSessionExpired();
@@ -230,6 +258,7 @@ async function hydratePlatformDataFromApi() {
     state.platformUpdatedAt = payload.updatedAt || "";
     if (Array.isArray(payload.months)) months = payload.months;
     if (payload.permissions) state.session.permissions = payload.permissions;
+    state.lastHydratedAt = new Date().toISOString();
     ensureMonthlyScheduleState();
     localStorage.setItem(PLATFORM_STORAGE_KEY, JSON.stringify({
       savedAt: new Date().toISOString(),
@@ -245,8 +274,14 @@ async function hydratePlatformDataFromApi() {
       saveAuthSession(state.session);
     }
     renderAll();
+    if (wasDetailOpen && activeName) {
+      const member = activeMember();
+      if (member) openMemberDetail(member);
+    }
   } catch (error) {
     console.warn("API load failed; using local data fallback.", error);
+  } finally {
+    state.isRefreshing = false;
   }
 }
 
@@ -384,6 +419,9 @@ const state = {
   activeMemberName: "",
   mtgMemberName: "",
   platformUpdatedAt: "",
+  lastHydratedAt: "",
+  isSaving: false,
+  isRefreshing: false,
   updateDrafts: {},
   detailFeed: [],
   operationFeed: [
@@ -830,6 +868,7 @@ function switchView(viewId) {
   $$(".nav-tab").forEach((item) => item.classList.toggle("active", item.dataset.view === viewId));
   $$(".view").forEach((item) => item.classList.toggle("active", item.id === viewId));
   renderShell();
+  void hydratePlatformDataFromApi({ reason: `view:${viewId}` });
 }
 
 function memberSalesValue(member) {
@@ -2838,6 +2877,27 @@ function bindEvents() {
   });
 }
 
+function startAutoRefresh() {
+  window.addEventListener("focus", () => {
+    void hydratePlatformDataFromApi({ reason: "window-focus" });
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      void hydratePlatformDataFromApi({ reason: "visible" });
+    }
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === PLATFORM_STORAGE_KEY && !hasUnsavedDrafts()) {
+      void hydratePlatformDataFromApi({ reason: "storage" });
+    }
+  });
+  setInterval(() => {
+    if (document.visibilityState === "visible") {
+      void hydratePlatformDataFromApi({ reason: "interval" });
+    }
+  }, AUTO_REFRESH_INTERVAL_MS);
+}
+
 function renderAll() {
   if (!state.session) {
     renderAuthShell();
@@ -2864,6 +2924,7 @@ renderCompanySelect();
 renderLoginCompanies();
 $("#loginCompanyField").style.display = "none";
 bindEvents();
+startAutoRefresh();
 renderAuthShell();
 renderAll();
-hydratePlatformDataFromApi();
+hydratePlatformDataFromApi({ force: true, reason: "initial-load" });
