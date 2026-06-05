@@ -1528,6 +1528,21 @@ function draftCount() {
   return Object.values(state.updateDrafts).reduce((sum, fields) => sum + Object.keys(fields).length, 0);
 }
 
+function draftValueMatchesOriginal(member, field, value) {
+  const current = currentDraftValue(member, field);
+  if (field === "followers") {
+    const nextValue = value === "" || value === null || value === undefined ? null : Number(value);
+    return ((current === null || current === undefined || current === "") && nextValue === null)
+      || Number(current) === nextValue;
+  }
+  if (field === "sales") return Number(current || 0) === Number(value || 0);
+  if (field === "accountLinks") {
+    return JSON.stringify(normalizeAccountLinks(current)) === JSON.stringify(normalizeAccountLinks(value));
+  }
+  if (milestoneKeys().includes(field)) return Boolean(current) === Boolean(value);
+  return String(current ?? "") === String(value ?? "");
+}
+
 function draftFieldLabel(field) {
   if (field === "followers") return "フォロワー";
   if (field === "sales") return "売上";
@@ -1629,9 +1644,29 @@ function updateDraftStatus() {
 
 function setUpdateDraft(memberName, field, value) {
   if (!roleCanEdit()) return;
+  const member = selectedCompany().members.find((item) => item.name === memberName);
+  if (!member) return;
   state.updateDrafts[memberName] = state.updateDrafts[memberName] || {};
-  state.updateDrafts[memberName][field] = value;
+  if (draftValueMatchesOriginal(member, field, value)) {
+    delete state.updateDrafts[memberName][field];
+    if (!Object.keys(state.updateDrafts[memberName]).length) delete state.updateDrafts[memberName];
+  } else {
+    state.updateDrafts[memberName][field] = value;
+  }
   updateDraftStatus();
+}
+
+function collectUpdateSheetDraftsFromDom() {
+  if (!roleCanEdit()) return;
+  $$("#updateSheetBody tr[data-member]").forEach((row) => {
+    const memberName = row.dataset.member;
+    row.querySelectorAll("[data-field]").forEach((input) => {
+      const field = input.dataset.field;
+      if (!field) return;
+      const value = input.type === "checkbox" ? input.checked : input.value;
+      setUpdateDraft(memberName, field, value);
+    });
+  });
 }
 
 function progressLabel(value) {
@@ -1873,6 +1908,7 @@ function updateSheetMember(member, field, rawValue, checked) {
 
 function applyUpdateDrafts() {
   if (!roleCanEdit()) return;
+  collectUpdateSheetDraftsFromDom();
   const company = selectedCompany();
   const count = draftCount();
   const people = Object.keys(state.updateDrafts).length;
@@ -2553,6 +2589,17 @@ function bindEvents() {
     if (!memberName) return;
     setUpdateDraft(memberName, field, target.type === "checkbox" ? target.checked : target.value);
     renderUpdateSheet();
+  });
+
+  $("#updateSheetBody").addEventListener("input", (event) => {
+    if (!roleCanUseUpdateWorkspace()) return;
+    const target = event.target;
+    const field = target.dataset.field;
+    if (!field || target.type === "checkbox" || target.tagName === "SELECT") return;
+    const row = target.closest("tr");
+    const memberName = row?.dataset.member;
+    if (!memberName) return;
+    setUpdateDraft(memberName, field, target.value);
   });
 
   $("#saveUpdateSheet").addEventListener("click", applyUpdateDrafts);
