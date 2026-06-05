@@ -152,6 +152,38 @@ function apiAvailable() {
   return location.protocol === "http:" || location.protocol === "https:";
 }
 
+function handleSessionExpired() {
+  clearAuthSession();
+  state.session = null;
+  state.role = "admin";
+  state.updateDrafts = {};
+  renderAuthShell();
+  renderAll();
+}
+
+async function saveCompaniesToApi(payload, attempt = 0) {
+  try {
+    const response = await fetch("/api/companies", {
+      method: "PUT",
+      headers: authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify(payload)
+    });
+    if (response.ok) return response;
+    const error = new Error(`API save failed: ${response.status}`);
+    error.status = response.status;
+    try {
+      error.detail = await response.json();
+    } catch {
+      error.detail = null;
+    }
+    if (response.status >= 500 && attempt < 1) return saveCompaniesToApi(payload, attempt + 1);
+    throw error;
+  } catch (error) {
+    if (!error.status && attempt < 1) return saveCompaniesToApi(payload, attempt + 1);
+    throw error;
+  }
+}
+
 async function savePlatformData(summary = "platform save", options = {}) {
   if (!roleCanEdit()) return false;
   try {
@@ -166,23 +198,14 @@ async function savePlatformData(summary = "platform save", options = {}) {
       companies: companyData
     }));
     if (apiAvailable()) {
-      const response = await fetch("/api/companies", {
-        method: "PUT",
-        headers: authHeaders({ "content-type": "application/json" }),
-        body: JSON.stringify({
+      await saveCompaniesToApi({
           actor: state.session?.name || "prototype",
           session: state.session,
           summary,
           scope: saveScope,
           companyId: saveScope === "company" ? company?.id : "",
           companies: companyData
-        })
       });
-      if (!response.ok) {
-        const error = new Error(`API save failed: ${response.status}`);
-        error.status = response.status;
-        throw error;
-      }
     }
     return true;
   } catch (error) {
@@ -197,10 +220,7 @@ async function hydratePlatformDataFromApi() {
     const authedResponse = await fetch("/api/companies", { headers: authHeaders() });
     if (!authedResponse.ok) {
       if ([401, 403].includes(authedResponse.status)) {
-        clearAuthSession();
-        state.session = null;
-        state.role = "admin";
-        renderAuthShell();
+        handleSessionExpired();
       }
       throw new Error(`API returned ${authedResponse.status}`);
     }
@@ -1964,9 +1984,10 @@ async function applyUpdateDrafts() {
       companies: companyData
     }));
     renderAll();
+    if ([401, 403].includes(error?.status)) handleSessionExpired();
     const message = [401, 403].includes(error?.status)
-      ? "ログイン状態が切れています。再ログインしてから、もう一度「保存して反映」を押してください。"
-      : "保存に失敗しました。通信状況を確認してから、もう一度「保存して反映」を押してください。";
+      ? "ログイン状態が切れています。もう一度ログインしてから「保存して反映」を押してください。"
+      : `保存に失敗しました。少し待ってからもう一度「保存して反映」を押してください。${error?.detail?.message ? `\n理由: ${error.detail.message}` : ""}`;
     window.alert(message);
   } finally {
     if (saveButton) saveButton.textContent = originalSaveText;
