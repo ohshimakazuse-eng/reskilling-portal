@@ -26,6 +26,7 @@ const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 const publicUrl = process.env.PUBLIC_URL || process.env.APP_PUBLIC_URL || "";
 const activeSessions = new Map();
+let companyWriteQueue = Promise.resolve();
 const nonClientCompanyIds = new Set(["nh", "vv"]);
 const isProduction = process.env.NODE_ENV === "production";
 const devAdminPassword = ["admin", "123"].join("");
@@ -383,23 +384,64 @@ async function handleApi(request, response, pathname) {
       sendJson(response, 403, { ok: false, message: "company scope violation" });
       return true;
     }
-    const db = await readDb();
-    const mergedCompanies = session.permissions.canViewAll
-      ? body.companies
-      : db.companies.map((company) => body.companies.find((item) => item.id === company.id) || company);
-    db.auditLogs.unshift({
-      id: crypto.randomUUID(),
-      action: "replace_companies",
-      actor: session.name,
-      createdAt: new Date().toISOString(),
-      summary: body.summary || "frontend save"
+    let saveResult;
+    let updatedAt;
+    companyWriteQueue = companyWriteQueue.then(async () => {
+      const db = await readDb();
+      const saveScope = body.scope === "all" ? "all" : "company";
+      const scopedCompanyId = String(body.companyId || session.companyId || "");
+      const incomingById = new Map(body.companies.map((company) => [company.id, company]));
+      let mergedCompanies = db.companies;
+      if (saveScope === "all") {
+        if (!session.permissions.canViewAll) {
+          const error = new Error("all-company save requires admin permission");
+          error.statusCode = 403;
+          throw error;
+        }
+        mergedCompanies = body.companies;
+      } else {
+        const incomingCompany = incomingById.get(scopedCompanyId);
+        if (!incomingCompany) {
+          const error = new Error("scoped company is missing from payload");
+          error.statusCode = 400;
+          throw error;
+        }
+        if (!session.permissions.canViewAll && scopedCompanyId !== session.companyId) {
+          const error = new Error("company scope violation");
+          error.statusCode = 403;
+          throw error;
+        }
+        const replaced = new Set();
+        mergedCompanies = db.companies.map((company) => {
+          if (company.id !== scopedCompanyId) return company;
+          replaced.add(company.id);
+          return incomingCompany;
+        });
+        if (!replaced.has(scopedCompanyId)) mergedCompanies.push(incomingCompany);
+      }
+      db.auditLogs.unshift({
+        id: crypto.randomUUID(),
+        action: saveScope === "all" ? "replace_companies" : "replace_company",
+        actor: session.name,
+        createdAt: new Date().toISOString(),
+        summary: body.summary || "frontend save",
+        companyId: saveScope === "company" ? scopedCompanyId : ""
+      });
+      db.companies = mergedCompanies;
+      await writeDb(db);
+      const normalizedDb = await readStoreDb();
+      applyLegacyCompaniesToNormalized(normalizedDb, mergedCompanies, session.name, body.summary || "frontend save");
+      saveResult = await writeStoreDb(normalizedDb);
+      updatedAt = saveResult?.updatedAt || normalizedDb.updatedAt;
     });
-    db.companies = mergedCompanies;
-    await writeDb(db);
-    const normalizedDb = await readStoreDb();
-    applyLegacyCompaniesToNormalized(normalizedDb, mergedCompanies, session.name, body.summary || "frontend save");
-    const saveResult = await writeStoreDb(normalizedDb);
-    sendJson(response, 200, { ok: true, updatedAt: saveResult?.updatedAt || normalizedDb.updatedAt, storage: storageName(), counts: saveResult?.counts });
+    try {
+      await companyWriteQueue;
+    } catch (error) {
+      companyWriteQueue = Promise.resolve();
+      sendJson(response, error.statusCode || 500, { ok: false, message: error.message });
+      return true;
+    }
+    sendJson(response, 200, { ok: true, updatedAt, storage: storageName(), counts: saveResult?.counts });
     return true;
   }
 

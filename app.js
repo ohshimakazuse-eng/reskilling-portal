@@ -152,12 +152,14 @@ function apiAvailable() {
   return location.protocol === "http:" || location.protocol === "https:";
 }
 
-async function savePlatformData(summary = "platform save") {
+async function savePlatformData(summary = "platform save", options = {}) {
   if (!roleCanEdit()) return false;
   try {
     const now = new Date().toISOString();
     state.platformUpdatedAt = now;
-    if (selectedCompany()) selectedCompany().lastUpdatedAt = now;
+    const company = selectedCompany();
+    const saveScope = options.scope || "company";
+    if (company) company.lastUpdatedAt = now;
     localStorage.setItem(PLATFORM_STORAGE_KEY, JSON.stringify({
       savedAt: now,
       sourceSignature: importedDataSignature,
@@ -171,6 +173,8 @@ async function savePlatformData(summary = "platform save") {
           actor: state.session?.name || "prototype",
           session: state.session,
           summary,
+          scope: saveScope,
+          companyId: saveScope === "company" ? company?.id : "",
           companies: companyData
         })
       });
@@ -307,7 +311,7 @@ function resetCurrentMonthNumbers({ force = false, persist = false } = {}) {
   localStorage.setItem(MONTHLY_RESET_STORAGE_KEY, monthKey);
   state.platformUpdatedAt = new Date().toISOString();
   addOperation("月次リセット", `${monthKey} を0で開始`, "当月売上・当月1000達成を0から開始");
-  if (persist) void persistAndRefresh(null, `${monthKey}: 月初リセット`);
+  if (persist) void persistAndRefresh(null, `${monthKey}: 月初リセット`, { scope: "all" });
   return true;
 }
 
@@ -318,7 +322,7 @@ function ensureMonthlyScheduleState() {
   const hasOlderPeriod = list.some((company) => company.monthlyPeriod && company.monthlyPeriod !== monthKey);
   if (hasOlderPeriod) {
     const changed = resetCurrentMonthNumbers({ force: false, persist: false });
-    if (changed) void savePlatformData(`${monthKey}: 月替わり自動リセット`);
+    if (changed) void savePlatformData(`${monthKey}: 月替わり自動リセット`, { scope: "all" });
     return changed;
   }
   let initialized = false;
@@ -334,13 +338,13 @@ function ensureMonthlyScheduleState() {
       }
     });
   });
-  if (initialized) void savePlatformData(`${monthKey}: 月次管理キー初期化`);
+  if (initialized) void savePlatformData(`${monthKey}: 月次管理キー初期化`, { scope: "all" });
   return false;
 }
 
-async function persistAndRefresh(member, summary) {
+async function persistAndRefresh(member, summary, options = {}) {
   regenerateAutoConclusions(member ? [member] : selectedCompany()?.members || []);
-  await savePlatformData(summary);
+  await savePlatformData(summary, options);
   renderAll();
   if (member) openMemberDetail(member);
   if (apiAvailable()) setTimeout(renderAuditLogs, 450);
