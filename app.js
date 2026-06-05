@@ -152,8 +152,8 @@ function apiAvailable() {
   return location.protocol === "http:" || location.protocol === "https:";
 }
 
-function savePlatformData(summary = "platform save") {
-  if (!roleCanEdit()) return;
+async function savePlatformData(summary = "platform save") {
+  if (!roleCanEdit()) return false;
   try {
     const now = new Date().toISOString();
     state.platformUpdatedAt = now;
@@ -164,7 +164,7 @@ function savePlatformData(summary = "platform save") {
       companies: companyData
     }));
     if (apiAvailable()) {
-      fetch("/api/companies", {
+      const response = await fetch("/api/companies", {
         method: "PUT",
         headers: authHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({
@@ -173,10 +173,13 @@ function savePlatformData(summary = "platform save") {
           summary,
           companies: companyData
         })
-      }).catch((error) => console.warn("API save failed; localStorage fallback is still available.", error));
+      });
+      if (!response.ok) throw new Error(`API save failed: ${response.status}`);
     }
+    return true;
   } catch (error) {
     console.warn("Platform data could not be saved in this browser.", error);
+    throw error;
   }
 }
 
@@ -300,7 +303,7 @@ function resetCurrentMonthNumbers({ force = false, persist = false } = {}) {
   localStorage.setItem(MONTHLY_RESET_STORAGE_KEY, monthKey);
   state.platformUpdatedAt = new Date().toISOString();
   addOperation("月次リセット", `${monthKey} を0で開始`, "当月売上・当月1000達成を0から開始");
-  if (persist) persistAndRefresh(null, `${monthKey}: 月初リセット`);
+  if (persist) void persistAndRefresh(null, `${monthKey}: 月初リセット`);
   return true;
 }
 
@@ -311,7 +314,7 @@ function ensureMonthlyScheduleState() {
   const hasOlderPeriod = list.some((company) => company.monthlyPeriod && company.monthlyPeriod !== monthKey);
   if (hasOlderPeriod) {
     const changed = resetCurrentMonthNumbers({ force: false, persist: false });
-    if (changed) savePlatformData(`${monthKey}: 月替わり自動リセット`);
+    if (changed) void savePlatformData(`${monthKey}: 月替わり自動リセット`);
     return changed;
   }
   let initialized = false;
@@ -327,13 +330,13 @@ function ensureMonthlyScheduleState() {
       }
     });
   });
-  if (initialized) savePlatformData(`${monthKey}: 月次管理キー初期化`);
+  if (initialized) void savePlatformData(`${monthKey}: 月次管理キー初期化`);
   return false;
 }
 
-function persistAndRefresh(member, summary) {
+async function persistAndRefresh(member, summary) {
   regenerateAutoConclusions(member ? [member] : selectedCompany()?.members || []);
-  savePlatformData(summary);
+  await savePlatformData(summary);
   renderAll();
   if (member) openMemberDetail(member);
   if (apiAvailable()) setTimeout(renderAuditLogs, 450);
@@ -1906,7 +1909,7 @@ function updateSheetMember(member, field, rawValue, checked) {
   addDetailUpdate("達成項目", `${member.name} の${allDetailMilestones().find((item) => item.key === field)?.label || field}を更新`, checked ? "完了に変更" : "未完了に変更", member);
 }
 
-function applyUpdateDrafts() {
+async function applyUpdateDrafts() {
   if (!roleCanEdit()) return;
   collectUpdateSheetDraftsFromDom();
   const company = selectedCompany();
@@ -1914,22 +1917,50 @@ function applyUpdateDrafts() {
   const people = Object.keys(state.updateDrafts).length;
   if (!count) return;
   if (!window.confirm(`${people}名 / ${count}項目を保存して、各社マイページへ反映します。よろしいですか？`)) return;
-  Object.entries(state.updateDrafts).forEach(([memberName, fields]) => {
-    const member = company.members.find((item) => item.name === memberName);
-    if (!member) return;
-    Object.entries(fields).forEach(([field, value]) => {
-      updateSheetMember(member, field, value, Boolean(value));
-    });
-    const beforeStatus = member.status;
-    const beforeProgress = member.progress;
-    recalculateMemberFormulas(member);
-    if (beforeStatus !== member.status || beforeProgress !== member.progress) {
-      addDetailUpdate("自動計算", `${member.name} の評価・進捗を自動更新`, `評価 ${member.status} / 進捗 ${member.progress}%`, member);
+  const beforeCompanies = cloneData(companyData);
+  const beforeDrafts = cloneData(state.updateDrafts);
+  const saveButton = $("#saveUpdateSheet");
+  const discardButton = $("#discardUpdateDrafts");
+  const originalSaveText = saveButton?.textContent || "保存して反映";
+  try {
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.textContent = "保存中...";
     }
-  });
-  recalcCompanyStats(company);
-  state.updateDrafts = {};
-  persistAndRefresh(null, `${company.name}: ${people}名 / ${count}項目を更新`);
+    if (discardButton) discardButton.disabled = true;
+    Object.entries(state.updateDrafts).forEach(([memberName, fields]) => {
+      const member = company.members.find((item) => item.name === memberName);
+      if (!member) return;
+      Object.entries(fields).forEach(([field, value]) => {
+        updateSheetMember(member, field, value, Boolean(value));
+      });
+      const beforeStatus = member.status;
+      const beforeProgress = member.progress;
+      recalculateMemberFormulas(member);
+      if (beforeStatus !== member.status || beforeProgress !== member.progress) {
+        addDetailUpdate("自動計算", `${member.name} の評価・進捗を自動更新`, `評価 ${member.status} / 進捗 ${member.progress}%`, member);
+      }
+    });
+    recalcCompanyStats(company);
+    regenerateAutoConclusions(company.members || []);
+    await savePlatformData(`${company.name}: ${people}名 / ${count}項目を更新`);
+    state.updateDrafts = {};
+    renderAll();
+    if (apiAvailable()) setTimeout(renderAuditLogs, 450);
+  } catch (error) {
+    companyData = beforeCompanies;
+    state.updateDrafts = beforeDrafts;
+    localStorage.setItem(PLATFORM_STORAGE_KEY, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      sourceSignature: importedDataSignature,
+      companies: companyData
+    }));
+    renderAll();
+    window.alert("保存に失敗しました。通信状況を確認してから、もう一度「保存して反映」を押してください。");
+  } finally {
+    if (saveButton) saveButton.textContent = originalSaveText;
+    updateDraftStatus();
+  }
 }
 
 function addCompanyFromForm() {
@@ -1952,7 +1983,7 @@ function addCompanyFromForm() {
   state.updateDrafts = {};
   $("#addCompanyForm").reset();
   addOperation("法人追加", `${name} を追加`, `ログインID ${code} / マイページを自動発行`);
-  persistAndRefresh(null, `${name}: 新規法人を追加`);
+  void persistAndRefresh(null, `${name}: 新規法人を追加`);
   renderCompanySelect();
   renderLoginCompanies();
   $("#companySelect").value = state.companyId;
@@ -1970,7 +2001,7 @@ function deleteMember(memberName) {
   if (state.mtgMemberName === member.name) state.mtgMemberName = company.members[0]?.name || "";
   recalcCompanyStats(company);
   addOperation("受講生削除", `${member.name} を削除`, `${company.name} の受講生一覧から非表示`);
-  persistAndRefresh(null, `${company.name}: ${member.name} を削除`);
+  void persistAndRefresh(null, `${company.name}: ${member.name} を削除`);
 }
 
 async function renderAuditLogs() {
@@ -2564,7 +2595,7 @@ function bindEvents() {
       request: $("#progressRequest").value.trim()
     };
     addOperation("進捗報告", "今月の進捗を更新", "会社ページの進捗報告を保存して反映");
-    persistAndRefresh(null, `${company.name}: 今月の進捗を更新`);
+    void persistAndRefresh(null, `${company.name}: 今月の進捗を更新`);
   });
 
   $$(".table-sort").forEach((button) => {
@@ -2638,7 +2669,7 @@ function bindEvents() {
     state.activeMemberName = member.name;
     $("#addMemberForm").reset();
     addOperation("受講生追加", `${member.name} を追加`, `${company.name} / 段階 ${stage} / 評価 ${status}`);
-    persistAndRefresh(member, `${company.name}: ${member.name} を追加`);
+    void persistAndRefresh(member, `${company.name}: ${member.name} を追加`);
   });
 
   $("#mtgOpsForm").addEventListener("submit", (event) => {
@@ -2659,7 +2690,7 @@ function bindEvents() {
     });
     state.mtgMemberName = member.name;
     addDetailUpdate("MTG", `${member.name} のMTGを登録`, `${$("#mtgDate").value} / ${$("#mtgResult").value} / ${$("#mtgContent").value}`, member);
-    persistAndRefresh();
+    void persistAndRefresh();
   });
 
   $("#detailMeetingForm").addEventListener("submit", (event) => {
@@ -2679,7 +2710,7 @@ function bindEvents() {
       result: $("#detailMeetingResult").value
     });
     addDetailUpdate("MTG", `${member.name} のMTGを追加`, `${$("#detailMeetingDate").value} / ${$("#detailMeetingResult").value} / ${$("#detailMeetingMemo").value}`);
-    persistAndRefresh(member);
+    void persistAndRefresh(member);
   });
 
   $("#detailMetricForm").addEventListener("submit", (event) => {
@@ -2694,7 +2725,7 @@ function bindEvents() {
     member.followerHistory[member.followerHistory.length - 1] = followerInput === "" ? null : Number(followerInput);
     member.salesHistory[member.salesHistory.length - 1] = Number($("#detailSales").value);
     addDetailUpdate("数字更新", `${member.name} の数字を更新`, `フォロワー ${formatFollowerValue(member.followerHistory.at(-1))} / 売上 ${money(Number($("#detailSales").value))}`);
-    persistAndRefresh(member);
+    void persistAndRefresh(member);
   });
 
   $("#detailStatusForm").addEventListener("submit", (event) => {
@@ -2706,7 +2737,7 @@ function bindEvents() {
     member.status = $("#detailStatus").value;
     member.progress = Number($("#detailProgress").value);
     addDetailUpdate("評価更新", `${member.name} の評価を更新`, `段階 ${$("#detailStage").value} / 評価 ${$("#detailStatus").value} / 進捗 ${$("#detailProgress").value}%`);
-    persistAndRefresh(member);
+    void persistAndRefresh(member);
   });
 
   $("#detailMilestoneForm").addEventListener("submit", (event) => {
@@ -2721,7 +2752,7 @@ function bindEvents() {
     const done = allDetailMilestones().filter((item) => member[item.key]).length;
     member.progress = Math.round((done / allDetailMilestones().length) * 100);
     addDetailUpdate("達成項目", `${member.name} の達成項目を更新`, `${done}/${allDetailMilestones().length} 項目を完了として保存`);
-    persistAndRefresh(member);
+    void persistAndRefresh(member);
   });
 
   $("#detailClientMemoForm").addEventListener("submit", (event) => {
@@ -2731,7 +2762,7 @@ function bindEvents() {
     if (!member) return;
     member.clientMemo = $("#detailClientMemo").value;
     addDetailUpdate("共有メモ", `${member.name} のクライアント向けメモを保存`, $("#detailClientMemo").value);
-    persistAndRefresh(member);
+    void persistAndRefresh(member);
   });
 
   $("#detailClose").addEventListener("click", closeMemberDetail);
