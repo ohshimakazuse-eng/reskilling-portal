@@ -13,6 +13,11 @@ const tablePlan = [
   ["audit_logs", "id"]
 ];
 
+const tableWriteOptions = {
+  update_batches: { chunkSize: 50, maxRows: 500, optional: true, maxAttempts: 2 },
+  audit_logs: { chunkSize: 25, maxRows: 500, optional: true, maxAttempts: 2 }
+};
+
 function normalizeSupabaseUrl(url) {
   return String(url || "").replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
 }
@@ -102,14 +107,16 @@ async function fetchAll(config, table) {
   return rows;
 }
 
-async function upsertRows(config, table, conflict, rows) {
+async function upsertRows(config, table, conflict, rows, options = {}) {
   if (!rows.length) return 0;
-  const chunkSize = 500;
+  const orderedRows = options.maxRows ? rows.slice(0, options.maxRows) : rows;
+  const chunkSize = options.chunkSize || 500;
   let count = 0;
-  for (let index = 0; index < rows.length; index += chunkSize) {
-    const chunk = rows.slice(index, index + chunkSize);
+  for (let index = 0; index < orderedRows.length; index += chunkSize) {
+    const chunk = orderedRows.slice(index, index + chunkSize);
     await requestJson(config, `${table}?on_conflict=${encodeURIComponent(conflict).replaceAll("%2C", ",")}`, {
       method: "POST",
+      maxAttempts: options.maxAttempts,
       headers: {
         "content-type": "application/json",
         Prefer: "resolution=merge-duplicates,return=minimal"
@@ -144,7 +151,15 @@ export async function writeSupabaseNormalizedDb(db) {
   const counts = {};
   for (const [table, conflict] of tablePlan) {
     const rows = db.tables[table] || [];
-    counts[table] = await upsertRows(config, table, conflict, rows);
+    const options = tableWriteOptions[table] || {};
+    try {
+      counts[table] = await upsertRows(config, table, conflict, rows, options);
+    } catch (error) {
+      if (!options.optional) throw error;
+      console.warn(`${table} write skipped:`, error.message);
+      counts[table] = 0;
+      counts[`${table}_skipped`] = rows.length;
+    }
   }
   return { counts, updatedAt: new Date().toISOString() };
 }
