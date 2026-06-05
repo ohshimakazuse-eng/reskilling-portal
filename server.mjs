@@ -309,16 +309,16 @@ async function writeDb(db) {
   await writeFile(dbPath, JSON.stringify(db, null, 2));
 }
 
-async function readStoreDb() {
-  return isSupabaseConfigured() ? readSupabaseNormalizedDb() : readNormalizedDb(root);
+async function readStoreDb(options = {}) {
+  return isSupabaseConfigured() ? readSupabaseNormalizedDb(options) : readNormalizedDb(root);
 }
 
-async function writeStoreDb(db) {
-  return isSupabaseConfigured() ? writeSupabaseNormalizedDb(db) : writeNormalizedDb(root, db);
+async function writeStoreDb(db, options = {}) {
+  return isSupabaseConfigured() ? writeSupabaseNormalizedDb(db, options) : writeNormalizedDb(root, db);
 }
 
-async function hydratedCompaniesForSession(session = null) {
-  const normalizedDb = await readStoreDb();
+async function hydratedCompaniesForSession(session = null, options = {}) {
+  const normalizedDb = await readStoreDb(options);
   const db = isSupabaseConfigured()
     ? { months: defaultMonths, companies: [], auditLogs: [] }
     : await readDb();
@@ -341,13 +341,13 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-05-fast-company-save", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-05-scoped-db-read", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
   if ((pathname === "/api/login" || pathname === "/api/auth/login" || pathname === "/api/session" || pathname === "/api/sessions" || pathname === "/api/companies") && request.method === "POST") {
     const body = await readJsonBody(request);
-    const { db, companies } = await hydratedCompaniesForSession();
+    const { companies } = await hydratedCompaniesForSession(null, { companiesOnly: true });
     const resolved = resolveLogin(body, companies);
     if (!resolved) {
       sendJson(response, 401, { ok: false, message: "Invalid credentials" });
@@ -366,7 +366,7 @@ async function handleApi(request, response, pathname) {
   if (pathname === "/api/companies" && request.method === "GET") {
     if (request.headers["x-portal-auth"]) {
       const body = loginBodyFromRequest(request);
-      const { companies } = await hydratedCompaniesForSession();
+      const { companies } = await hydratedCompaniesForSession(null, { companiesOnly: true });
       const resolved = resolveLogin(body, companies);
       if (!resolved) {
         sendJson(response, 401, { ok: false, message: "Invalid credentials" });
@@ -383,7 +383,8 @@ async function handleApi(request, response, pathname) {
     }
     const session = requireSession(request, response);
     if (!session) return true;
-    const { db, normalizedDb, companies } = await hydratedCompaniesForSession(session);
+    const readOptions = session.permissions.canViewAll ? {} : { companyCodes: [session.companyId] };
+    const { db, normalizedDb, companies } = await hydratedCompaniesForSession(session, readOptions);
     sendJson(response, 200, clientSafePayload({ ok: true, months: db.months, companies, updatedAt: normalizedDb.updatedAt, storage: storageName(), permissions: session.permissions }, session));
     return true;
   }
@@ -408,9 +409,10 @@ async function handleApi(request, response, pathname) {
     let saveResult;
     let updatedAt;
     companyWriteQueue = companyWriteQueue.then(async () => {
-      const { db, normalizedDb, companies: currentCompanies } = await hydratedCompaniesForSession();
       const saveScope = body.scope === "all" ? "all" : "company";
       const scopedCompanyId = String(body.companyId || session.companyId || "");
+      const readOptions = saveScope === "company" ? { companyCodes: [scopedCompanyId] } : {};
+      const { db, normalizedDb, companies: currentCompanies } = await hydratedCompaniesForSession(null, readOptions);
       const incomingById = new Map(body.companies.map((company) => [company.id, company]));
       let mergedCompanies = currentCompanies;
       if (saveScope === "all") {

@@ -93,12 +93,16 @@ async function requestJson(config, path, options = {}, attempt = 0) {
   return text ? JSON.parse(text) : null;
 }
 
-async function fetchAll(config, table) {
+function inFilter(values) {
+  return `in.(${values.map((value) => encodeURIComponent(String(value))).join(",")})`;
+}
+
+async function fetchAll(config, table, query = "select=*") {
   const rows = [];
   const pageSize = 1000;
   for (let from = 0; ; from += pageSize) {
     const to = from + pageSize - 1;
-    const page = await requestJson(config, `${table}?select=*`, {
+    const page = await requestJson(config, `${table}?${query}`, {
       headers: { Range: `${from}-${to}` }
     });
     rows.push(...(page || []));
@@ -152,9 +156,51 @@ function rowsForCompanyScope(db, companyCodes = []) {
   };
 }
 
-export async function readSupabaseNormalizedDb() {
+export async function readSupabaseNormalizedDb(options = {}) {
   const config = supabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
+  if (options.companiesOnly) {
+    const tables = Object.fromEntries(tablePlan.map(([table]) => [table, []]));
+    tables.companies = await fetchAll(config, "companies");
+    return {
+      version: 2,
+      createdAt: null,
+      updatedAt: new Date().toISOString(),
+      source: "supabase",
+      generatedAt: null,
+      tables
+    };
+  }
+  if (options.companyCodes?.length) {
+    const tables = Object.fromEntries(tablePlan.map(([table]) => [table, []]));
+    const allCompanies = await fetchAll(config, "companies");
+    tables.companies = allCompanies.filter((company) => options.companyCodes.includes(company.code));
+    const companyIds = tables.companies.map((company) => company.id);
+    if (companyIds.length) {
+      const companyFilter = inFilter(companyIds);
+      tables.company_users = await fetchAll(config, "company_users", `select=*&company_id=${companyFilter}`);
+      tables.members = await fetchAll(config, "members", `select=*&company_id=${companyFilter}`);
+      const memberIds = tables.members.map((member) => member.id);
+      if (memberIds.length) {
+        const memberFilter = inFilter(memberIds);
+        tables.member_accounts = await fetchAll(config, "member_accounts", `select=*&member_id=${memberFilter}`);
+        tables.member_milestones = await fetchAll(config, "member_milestones", `select=*&member_id=${memberFilter}`);
+        tables.member_metrics = await fetchAll(config, "member_metrics", `select=*&member_id=${memberFilter}`);
+        tables.coaching_sessions = await fetchAll(config, "coaching_sessions", `select=*&member_id=${memberFilter}`);
+      }
+      tables.company_monthly_summaries = await fetchAll(config, "company_monthly_summaries", `select=*&company_id=${companyFilter}`);
+      tables.client_reports = await fetchAll(config, "client_reports", `select=*&company_id=${companyFilter}`);
+      tables.audit_logs = await fetchAll(config, "audit_logs", `select=*&company_id=${companyFilter}`);
+    }
+    return {
+      version: 2,
+      createdAt: null,
+      updatedAt: new Date().toISOString(),
+      source: "supabase",
+      generatedAt: null,
+      tables
+    };
+  }
   const tables = {};
   for (const [table] of tablePlan) {
     tables[table] = await fetchAll(config, table);
