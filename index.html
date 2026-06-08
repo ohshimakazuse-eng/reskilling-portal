@@ -4,9 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reskill One</title>
-    <link rel="stylesheet" href="./styles.css?v=20260608-db-sync-marker" />
+    <link rel="stylesheet" href="./styles.css?v=20260608-sync-production-guard" />
   </head>
   <body>
+    <div class="environment-warning hidden" id="environmentWarning">
+      <strong>ローカル確認中</strong>
+      <span>このURLで保存しても本番利用者に反映されない場合があります。本番URLで運用してください。</span>
+      <a href="https://reskilling-portal.onrender.com">本番を開く</a>
+    </div>
     <section class="auth-screen" id="authScreen" aria-label="ログイン">
       <div class="auth-card">
         <div class="brand auth-brand">
@@ -609,6 +614,6 @@
         </div>
       </section>
     </div>
-    <script src="./app.js?v=20260608-db-sync-marker"></script>
+    <script src="./app.js?v=20260608-sync-production-guard"></script>
   </body>
 </html>

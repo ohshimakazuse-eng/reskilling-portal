@@ -359,7 +359,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-08-db-sync-marker", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-08-sync-production-guard", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 

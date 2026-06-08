@@ -56,6 +56,33 @@ select {
   display: none !important;
 }
 
+.environment-warning {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #8a1f17;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: 0 6px 20px rgba(138, 31, 23, 0.18);
+}
+
+.environment-warning a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #8a1f17;
+  text-decoration: none;
+}
+
 .auth-card {
   width: min(460px, 100%);
   display: grid;

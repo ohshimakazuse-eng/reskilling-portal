@@ -12,6 +12,7 @@ const CLIENT_LOGIN_ALIASES = {
   recrea: "レクレア",
   rower: "ローワー"
 };
+const PRODUCTION_URL = "https://reskilling-portal.onrender.com";
 const importedCompanyData = window.RESKILLING_DATA?.companies || fallbackCompanyData;
 let months = window.RESKILLING_DATA?.months || ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 const milestoneLabels = [
@@ -154,6 +155,10 @@ function apiAvailable() {
   return location.protocol === "http:" || location.protocol === "https:";
 }
 
+function isLocalEnvironment() {
+  return ["127.0.0.1", "localhost", "::1"].includes(location.hostname);
+}
+
 function handleSessionExpired() {
   clearAuthSession();
   state.session = null;
@@ -188,6 +193,10 @@ async function saveCompaniesToApi(payload, attempt = 0) {
 
 async function savePlatformData(summary = "platform save", options = {}) {
   if (!roleCanEdit()) return false;
+  if (isLocalEnvironment() && !options.allowLocalSave) {
+    const ok = window.confirm("現在ローカル確認用URLで開いています。この保存は本番利用者に反映されない可能性があります。\n\n本番URLで保存することを推奨します。このまま保存しますか？");
+    if (!ok) return false;
+  }
   try {
     state.isSaving = true;
     const now = new Date().toISOString();
@@ -2931,6 +2940,14 @@ function startAutoRefresh() {
   }, AUTO_REFRESH_INTERVAL_MS);
 }
 
+function renderEnvironmentWarning() {
+  const warning = $("#environmentWarning");
+  if (!warning) return;
+  warning.classList.toggle("hidden", !isLocalEnvironment());
+  const link = warning.querySelector("a");
+  if (link) link.href = PRODUCTION_URL;
+}
+
 function renderAll() {
   if (!state.session) {
     renderAuthShell();
@@ -2958,6 +2975,7 @@ renderLoginCompanies();
 $("#loginCompanyField").style.display = "none";
 bindEvents();
 startAutoRefresh();
+renderEnvironmentWarning();
 renderAuthShell();
 renderAll();
 hydratePlatformDataFromApi({ force: true, reason: "initial-load" });
