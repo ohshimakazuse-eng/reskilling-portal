@@ -704,10 +704,12 @@ const server = createServer(async (request, response) => {
 
 async function startServer() {
   await ensureDb();
-  await syncBundledDataToSupabaseIfNeeded();
   server.listen(port, host, () => {
     const displayHost = host === "0.0.0.0" ? "localhost" : host;
     console.log(`Reskilling Portal server: ${publicUrl || `http://${displayHost}:${port}`}`);
+    syncBundledDataToSupabaseIfNeeded().catch((error) => {
+      console.error("Bundled data sync failed:", error);
+    });
   });
 }
 
