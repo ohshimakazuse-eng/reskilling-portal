@@ -55,6 +55,21 @@ const resultToLegacy = {
   continued: "継続"
 };
 
+const normalizedTableNames = [
+  "app_users",
+  "companies",
+  "company_users",
+  "members",
+  "member_accounts",
+  "member_milestones",
+  "member_metrics",
+  "coaching_sessions",
+  "company_monthly_summaries",
+  "client_reports",
+  "update_batches",
+  "audit_logs"
+];
+
 function toLegacyDate(value) {
   return String(value || "").replaceAll("-", "/");
 }
@@ -293,14 +308,30 @@ export async function ensureNormalizedDb(root) {
   try {
     await stat(normalizedPath);
   } catch {
-    const seed = JSON.parse(await readFile(seedPath, "utf8"));
+    let source = "data.js";
+    let generatedAt = new Date().toISOString();
+    let tables = Object.fromEntries(normalizedTableNames.map((table) => [table, []]));
+    try {
+      const seed = JSON.parse(await readFile(seedPath, "utf8"));
+      source = seed.source;
+      generatedAt = seed.generated_at;
+      tables = seed.tables;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+      const bundled = await readFile(join(root, "data.js"), "utf8");
+      const match = bundled.match(/window\.RESKILLING_DATA\s*=\s*([\s\S]*);\s*$/);
+      if (!match) throw new Error("data.js から初期データを読み取れませんでした。");
+      const legacyData = JSON.parse(match[1]);
+      generatedAt = legacyData.generatedAt || generatedAt;
+      applyLegacyCompaniesToNormalized({ tables }, legacyData.companies || [], "system", "data.js fallback seed");
+    }
     await writeFile(normalizedPath, JSON.stringify({
       version: 1,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      source: seed.source,
-      generatedAt: seed.generated_at,
-      tables: seed.tables
+      source,
+      generatedAt,
+      tables
     }, null, 2));
   }
 }
@@ -308,7 +339,13 @@ export async function ensureNormalizedDb(root) {
 export async function readNormalizedDb(root) {
   await ensureNormalizedDb(root);
   const db = JSON.parse(await readFile(join(root, "db", "normalized-db.json"), "utf8"));
-  const seed = JSON.parse(await readFile(join(root, "db", "production-seed.json"), "utf8"));
+  let seed = null;
+  try {
+    seed = JSON.parse(await readFile(join(root, "db", "production-seed.json"), "utf8"));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    seed = { tables: Object.fromEntries(normalizedTableNames.map((table) => [table, []])) };
+  }
   let changed = false;
   Object.entries(seed.tables || {}).forEach(([table, rows]) => {
     if (!Array.isArray(db.tables[table])) {
