@@ -16,6 +16,7 @@ import {
 import {
   isSupabaseConfigured,
   readSupabaseNormalizedDb,
+  readSupabaseSyncState,
   writeSupabaseNormalizedDb
 } from "./supabase-store.mjs";
 
@@ -27,7 +28,6 @@ const host = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0
 const publicUrl = process.env.PUBLIC_URL || process.env.APP_PUBLIC_URL || "";
 const activeSessions = new Map();
 let companyWriteQueue = Promise.resolve();
-let latestWriteAt = "";
 const nonClientCompanyIds = new Set(["nh", "vv"]);
 const isProduction = process.env.NODE_ENV === "production";
 const devAdminPassword = ["admin", "123"].join("");
@@ -318,6 +318,23 @@ async function writeStoreDb(db, options = {}) {
   return isSupabaseConfigured() ? writeSupabaseNormalizedDb(db, options) : writeNormalizedDb(root, db);
 }
 
+async function readStoreSyncState(session = null) {
+  const companyCodes = session && !session.permissions.canViewAll ? [session.companyId] : [];
+  if (isSupabaseConfigured()) return readSupabaseSyncState({ companyCodes });
+  const normalizedDb = await readNormalizedDb(root);
+  const companies = normalizedDb.tables.companies || [];
+  const scoped = companyCodes.length ? companies.filter((company) => companyCodes.includes(company.code)) : companies;
+  const values = scoped
+    .map((company) => company.updated_at)
+    .filter(Boolean)
+    .map((value) => new Date(value))
+    .filter((date) => !Number.isNaN(date.getTime()));
+  return {
+    updatedAt: values.length ? new Date(Math.max(...values.map((date) => date.getTime()))).toISOString() : normalizedDb.updatedAt || "",
+    companyCount: scoped.length
+  };
+}
+
 async function hydratedCompaniesForSession(session = null, options = {}) {
   const normalizedDb = await readStoreDb(options);
   const db = isSupabaseConfigured()
@@ -342,14 +359,15 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-08-live-sync", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-08-db-sync-marker", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
   if (pathname === "/api/sync-state" && request.method === "GET") {
     const session = requireSession(request, response);
     if (!session) return true;
-    sendJson(response, 200, { ok: true, updatedAt: latestWriteAt });
+    const syncState = await readStoreSyncState(session);
+    sendJson(response, 200, { ok: true, ...syncState });
     return true;
   }
 
@@ -393,7 +411,8 @@ async function handleApi(request, response, pathname) {
     if (!session) return true;
     const readOptions = session.permissions.canViewAll ? {} : { companyCodes: [session.companyId] };
     const { db, normalizedDb, companies } = await hydratedCompaniesForSession(session, readOptions);
-    sendJson(response, 200, clientSafePayload({ ok: true, months: db.months, companies, updatedAt: normalizedDb.updatedAt, storage: storageName(), permissions: session.permissions }, session));
+    const syncState = await readStoreSyncState(session);
+    sendJson(response, 200, clientSafePayload({ ok: true, months: db.months, companies, updatedAt: syncState.updatedAt || normalizedDb.updatedAt, storage: storageName(), permissions: session.permissions }, session));
     return true;
   }
 
@@ -471,7 +490,6 @@ async function handleApi(request, response, pathname) {
         companyCodes: saveScope === "company" ? [scopedCompanyId] : []
       });
       updatedAt = saveResult?.updatedAt || normalizedDb.updatedAt;
-      latestWriteAt = updatedAt || new Date().toISOString();
     });
     try {
       await companyWriteQueue;

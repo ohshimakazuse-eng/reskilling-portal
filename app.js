@@ -4,6 +4,7 @@ const PLATFORM_STORAGE_KEY = "reskilling-platform-data-v2";
 const SESSION_STORAGE_KEY = "reskilling-session-v1";
 const MONTHLY_RESET_STORAGE_KEY = "reskilling-monthly-reset-v1";
 const AUTO_REFRESH_INTERVAL_MS = 5000;
+const FULL_REFRESH_INTERVAL_MS = 30000;
 const NON_CLIENT_COMPANY_IDS = new Set(["nh", "vv"]);
 const CLIENT_LOGIN_ALIASES = {
   iberis: "イベリス",
@@ -298,6 +299,13 @@ async function checkPlatformSyncState(options = {}) {
       return;
     }
     const payload = await response.json();
+    const checkedAt = Date.now();
+    const lastFullRefreshAt = state.lastFullRefreshAt || 0;
+    if (checkedAt - lastFullRefreshAt >= FULL_REFRESH_INTERVAL_MS) {
+      await hydratePlatformDataFromApi({ force: true, reason: options.reason || "scheduled-full-refresh" });
+      state.lastFullRefreshAt = checkedAt;
+      return;
+    }
     if (!payload.updatedAt) return;
     const localTime = state.platformUpdatedAt ? Date.parse(state.platformUpdatedAt) : 0;
     const remoteTime = Date.parse(payload.updatedAt);
@@ -444,6 +452,7 @@ const state = {
   mtgMemberName: "",
   platformUpdatedAt: "",
   lastHydratedAt: "",
+  lastFullRefreshAt: 0,
   isSaving: false,
   isRefreshing: false,
   updateDrafts: {},

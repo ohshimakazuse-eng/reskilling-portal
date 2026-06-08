@@ -215,6 +215,24 @@ export async function readSupabaseNormalizedDb(options = {}) {
   };
 }
 
+export async function readSupabaseSyncState(options = {}) {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  const query = options.companyCodes?.length
+    ? `select=code,updated_at&code=${inFilter(options.companyCodes)}`
+    : "select=code,updated_at";
+  const rows = await fetchAll(config, "companies", query);
+  const values = rows
+    .map((row) => row.updated_at)
+    .filter(Boolean)
+    .map((value) => new Date(value))
+    .filter((date) => !Number.isNaN(date.getTime()));
+  const updatedAt = values.length
+    ? new Date(Math.max(...values.map((date) => date.getTime()))).toISOString()
+    : "";
+  return { updatedAt, companyCount: rows.length };
+}
+
 export async function writeSupabaseNormalizedDb(db, writeOptions = {}) {
   const config = supabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
