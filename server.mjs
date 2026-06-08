@@ -293,7 +293,7 @@ async function bundledDataSeed() {
 }
 
 async function syncBundledDataToSupabaseIfNeeded() {
-  if (!isSupabaseConfigured() || process.env.AUTO_SYNC_BUNDLED_DATA === "false") return;
+  if (!isSupabaseConfigured() || process.env.AUTO_SYNC_BUNDLED_DATA !== "true") return;
   const { hash, data } = await bundledDataSeed();
   const normalizedDb = await readSupabaseNormalizedDb();
   const alreadySynced = (normalizedDb.tables.audit_logs || []).some((log) => (
@@ -406,7 +406,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-08-bundled-sheet-sync", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-08-stable-startup", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
