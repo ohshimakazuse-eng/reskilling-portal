@@ -3,7 +3,7 @@ const fallbackCompanyData = [];
 const PLATFORM_STORAGE_KEY = "reskilling-platform-data-v2";
 const SESSION_STORAGE_KEY = "reskilling-session-v1";
 const MONTHLY_RESET_STORAGE_KEY = "reskilling-monthly-reset-v1";
-const AUTO_REFRESH_INTERVAL_MS = 20000;
+const AUTO_REFRESH_INTERVAL_MS = 5000;
 const NON_CLIENT_COMPANY_IDS = new Set(["nh", "vv"]);
 const CLIENT_LOGIN_ALIASES = {
   iberis: "イベリス",
@@ -282,6 +282,30 @@ async function hydratePlatformDataFromApi(options = {}) {
     console.warn("API load failed; using local data fallback.", error);
   } finally {
     state.isRefreshing = false;
+  }
+}
+
+async function checkPlatformSyncState(options = {}) {
+  if (!apiAvailable() || !state.session?.token) return;
+  if (!canRefreshPlatformData(options)) return;
+  try {
+    const response = await fetch("/api/sync-state", {
+      cache: "no-store",
+      headers: authHeaders({ "cache-control": "no-cache" })
+    });
+    if (!response.ok) {
+      if ([401, 403].includes(response.status)) handleSessionExpired();
+      return;
+    }
+    const payload = await response.json();
+    if (!payload.updatedAt) return;
+    const localTime = state.platformUpdatedAt ? Date.parse(state.platformUpdatedAt) : 0;
+    const remoteTime = Date.parse(payload.updatedAt);
+    if (Number.isFinite(remoteTime) && remoteTime > localTime) {
+      await hydratePlatformDataFromApi({ force: true, reason: options.reason || "remote-change" });
+    }
+  } catch (error) {
+    console.warn("Sync state check failed.", error);
   }
 }
 
@@ -2893,7 +2917,7 @@ function startAutoRefresh() {
   });
   setInterval(() => {
     if (document.visibilityState === "visible") {
-      void hydratePlatformDataFromApi({ reason: "interval" });
+      void checkPlatformSyncState({ reason: "interval" });
     }
   }, AUTO_REFRESH_INTERVAL_MS);
 }

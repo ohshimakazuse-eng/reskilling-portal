@@ -27,6 +27,7 @@ const host = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0
 const publicUrl = process.env.PUBLIC_URL || process.env.APP_PUBLIC_URL || "";
 const activeSessions = new Map();
 let companyWriteQueue = Promise.resolve();
+let latestWriteAt = "";
 const nonClientCompanyIds = new Set(["nh", "vv"]);
 const isProduction = process.env.NODE_ENV === "production";
 const devAdminPassword = ["admin", "123"].join("");
@@ -341,7 +342,14 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-05-auto-sync", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-08-live-sync", commit: process.env.RENDER_GIT_COMMIT || "" });
+    return true;
+  }
+
+  if (pathname === "/api/sync-state" && request.method === "GET") {
+    const session = requireSession(request, response);
+    if (!session) return true;
+    sendJson(response, 200, { ok: true, updatedAt: latestWriteAt });
     return true;
   }
 
@@ -463,6 +471,7 @@ async function handleApi(request, response, pathname) {
         companyCodes: saveScope === "company" ? [scopedCompanyId] : []
       });
       updatedAt = saveResult?.updatedAt || normalizedDb.updatedAt;
+      latestWriteAt = updatedAt || new Date().toISOString();
     });
     try {
       await companyWriteQueue;
