@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { extname, join, resolve } from "node:path";
 import {
   applyLegacyCompaniesToNormalized,
@@ -282,6 +282,53 @@ async function initialData() {
   }
 }
 
+async function bundledDataSeed() {
+  const source = await readFile(join(root, "data.js"), "utf8");
+  const match = source.match(/window\.RESKILLING_DATA\s*=\s*([\s\S]*);\s*$/);
+  if (!match) throw new Error("data.js から同期データを読み取れませんでした。");
+  return {
+    hash: createHash("sha256").update(source).digest("hex"),
+    data: JSON.parse(match[1])
+  };
+}
+
+async function syncBundledDataToSupabaseIfNeeded() {
+  if (!isSupabaseConfigured() || process.env.AUTO_SYNC_BUNDLED_DATA === "false") return;
+  const { hash, data } = await bundledDataSeed();
+  const normalizedDb = await readSupabaseNormalizedDb();
+  const alreadySynced = (normalizedDb.tables.audit_logs || []).some((log) => (
+    log.action === "bundled_data_sync" && log.after_json?.seedHash === hash
+  ));
+  if (alreadySynced) return;
+
+  applyLegacyCompaniesToNormalized(
+    normalizedDb,
+    data.companies || [],
+    "system",
+    `最新スプシ正本のデプロイ同期 ${data.generatedAt || hash.slice(0, 12)}`
+  );
+  normalizedDb.tables.audit_logs.unshift({
+    id: crypto.randomUUID(),
+    batch_id: null,
+    actor_id: null,
+    company_id: null,
+    target_type: "platform",
+    target_id: "bundled-data",
+    action: "bundled_data_sync",
+    before_json: null,
+    after_json: {
+      seedHash: hash,
+      generatedAt: data.generatedAt || null,
+      companies: (data.companies || []).length,
+      members: (data.companies || []).reduce((sum, company) => sum + (company.members || []).length, 0),
+      sales: (data.companies || []).reduce((sum, company) => sum + Number(company.sales || 0), 0)
+    },
+    created_at: new Date().toISOString()
+  });
+  const result = await writeSupabaseNormalizedDb(normalizedDb, { scope: "all" });
+  console.log(`Bundled data synced to Supabase: ${hash.slice(0, 12)} ${JSON.stringify(result.counts || {})}`);
+}
+
 async function ensureDb() {
   await mkdir(dbDir, { recursive: true });
   await ensureNormalizedDb(root);
@@ -359,7 +406,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-08-sync-production-guard", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-08-bundled-sheet-sync", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
@@ -655,7 +702,16 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, host, () => {
-  const displayHost = host === "0.0.0.0" ? "localhost" : host;
-  console.log(`Reskilling Portal server: ${publicUrl || `http://${displayHost}:${port}`}`);
+async function startServer() {
+  await ensureDb();
+  await syncBundledDataToSupabaseIfNeeded();
+  server.listen(port, host, () => {
+    const displayHost = host === "0.0.0.0" ? "localhost" : host;
+    console.log(`Reskilling Portal server: ${publicUrl || `http://${displayHost}:${port}`}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error("Server startup failed:", error);
+  process.exit(1);
 });
