@@ -6,7 +6,6 @@ __pycache__/
 backups/
 db/
 google_sheets_xlsx/
-data.js
 data-summary.json
 manuals/
 *.png
