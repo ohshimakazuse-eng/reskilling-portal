@@ -326,6 +326,72 @@ async function checkPlatformSyncState(options = {}) {
   }
 }
 
+function renderSheetSyncStatus() {
+  const panel = $("#sheetSyncPanel");
+  const statusEl = $("#sheetSyncStatus");
+  const button = $("#syncBundledData");
+  if (!panel || !statusEl || !button) return;
+  const visible = roleCanViewAll() && roleCanEdit();
+  panel.style.display = visible ? "" : "none";
+  if (!visible) return;
+  const sync = state.sheetSyncStatus;
+  const label = {
+    idle: "未実行",
+    running: "同期中",
+    completed: "完了",
+    skipped: "反映済み",
+    failed: "失敗"
+  }[sync?.status] || "未確認";
+  const completed = sync?.completedAt ? ` / 最終: ${new Date(sync.completedAt).toLocaleString("ja-JP")}` : "";
+  const source = sync?.result?.source
+    ? ` / ${sync.result.source.companies}社・${sync.result.source.members}名・${money(sync.result.source.sales)}`
+    : "";
+  statusEl.textContent = `${label}${completed}${source}。${sync?.message || "最新スプシ正本を本番DBへ反映できます。"}`;
+  button.disabled = sync?.status === "running";
+  button.textContent = sync?.status === "running" ? "同期中..." : "同期を開始";
+}
+
+async function fetchSheetSyncStatus() {
+  if (!apiAvailable() || !state.session?.token || !roleCanViewAll() || !roleCanEdit()) return;
+  try {
+    const response = await fetch("/api/admin/sync-bundled-data", {
+      headers: authHeaders({ "cache-control": "no-cache" })
+    });
+    if (!response.ok) return;
+    const payload = await response.json();
+    state.sheetSyncStatus = payload.sync;
+    renderSheetSyncStatus();
+    if (payload.sync?.status === "completed" || payload.sync?.status === "skipped") {
+      await hydratePlatformDataFromApi({ force: true, reason: "sheet-sync-complete" });
+    }
+  } catch (error) {
+    console.warn("Sheet sync status could not be loaded.", error);
+  }
+}
+
+async function startSheetSync() {
+  if (!apiAvailable() || !state.session?.token || !roleCanViewAll() || !roleCanEdit()) return;
+  const ok = window.confirm("最新スプシ正本を本番DBへ同期します。\n同期中も画面は利用できます。完了後に全社管理へ反映されます。");
+  if (!ok) return;
+  try {
+    const response = await fetch("/api/admin/sync-bundled-data", {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "同期を開始できませんでした。");
+    state.sheetSyncStatus = payload.sync;
+    renderSheetSyncStatus();
+    const poll = async () => {
+      await fetchSheetSyncStatus();
+      if (state.sheetSyncStatus?.status === "running") setTimeout(poll, 3000);
+    };
+    setTimeout(poll, 1800);
+  } catch (error) {
+    window.alert(`同期を開始できませんでした。\n${error.message}`);
+  }
+}
+
 function loadAuthSession() {
   try {
     const stored = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -462,6 +528,7 @@ const state = {
   platformUpdatedAt: "",
   lastHydratedAt: "",
   lastFullRefreshAt: 0,
+  sheetSyncStatus: null,
   isSaving: false,
   isRefreshing: false,
   updateDrafts: {},
@@ -2668,6 +2735,7 @@ function bindEvents() {
   });
 
   $("#logoutButton").addEventListener("click", logoutUser);
+  $("#syncBundledData").addEventListener("click", startSheetSync);
 
   $("#monthlyResetButton").addEventListener("click", () => {
     if (!roleCanEdit()) return;
@@ -2959,6 +3027,7 @@ function renderAll() {
   renderAdminCommandTop();
   renderCompanyGrid();
   renderCompanyTable();
+  renderSheetSyncStatus();
   renderKpis();
   renderExecutiveFocus();
   renderExecutiveSummary();
@@ -2979,3 +3048,4 @@ renderEnvironmentWarning();
 renderAuthShell();
 renderAll();
 hydratePlatformDataFromApi({ force: true, reason: "initial-load" });
+fetchSheetSyncStatus();

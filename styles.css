@@ -83,6 +83,28 @@ select {
   text-decoration: none;
 }
 
+.sync-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.sync-toolbar h2 {
+  margin: 2px 0 4px;
+  font-size: 18px;
+}
+
+.sync-toolbar .subtext {
+  margin: 0;
+}
+
 .auth-card {
   width: min(460px, 100%);
   display: grid;
@@ -3288,10 +3310,16 @@ td {
   }
 
   .top-actions,
+  .sync-toolbar,
   .focus-facts,
   .number-board .focus-facts,
   .company-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .sync-toolbar {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .kpi-value {

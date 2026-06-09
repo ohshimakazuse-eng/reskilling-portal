@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Reskill One</title>
-    <link rel="stylesheet" href="./styles.css?v=20260608-sync-production-guard" />
+    <link rel="stylesheet" href="./styles.css?v=20260608-manual-sheet-sync-ui" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -120,6 +120,14 @@
 
         <section class="view active" id="admin">
           <section class="period-strip" id="adminPeriodStrip"></section>
+          <section class="sync-toolbar" id="sheetSyncPanel">
+            <div>
+              <p class="eyebrow">正本同期</p>
+              <h2>最新スプシを本番DBへ反映</h2>
+              <p class="subtext" id="sheetSyncStatus">管理者のみ実行できます。</p>
+            </div>
+            <button class="primary-button small" id="syncBundledData" type="button">同期を開始</button>
+          </section>
 
           <section class="exec-focus command-top admin-command-top">
             <article class="focus-card number-board">
@@ -614,6 +622,6 @@
         </div>
       </section>
     </div>
-    <script src="./app.js?v=20260608-sync-production-guard"></script>
+    <script src="./app.js?v=20260608-manual-sheet-sync-ui"></script>
   </body>
 </html>

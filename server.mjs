@@ -28,6 +28,14 @@ const host = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0
 const publicUrl = process.env.PUBLIC_URL || process.env.APP_PUBLIC_URL || "";
 const activeSessions = new Map();
 let companyWriteQueue = Promise.resolve();
+let bundledDataSyncPromise = null;
+let bundledDataSyncStatus = {
+  status: "idle",
+  startedAt: null,
+  completedAt: null,
+  message: "未実行",
+  result: null
+};
 const nonClientCompanyIds = new Set(["nh", "vv"]);
 const isProduction = process.env.NODE_ENV === "production";
 const devAdminPassword = ["admin", "123"].join("");
@@ -292,19 +300,22 @@ async function bundledDataSeed() {
   };
 }
 
-async function syncBundledDataToSupabaseIfNeeded() {
-  if (!isSupabaseConfigured() || process.env.AUTO_SYNC_BUNDLED_DATA !== "true") return;
+async function syncBundledDataToSupabaseIfNeeded(options = {}) {
+  if (!isSupabaseConfigured()) return { ok: false, skipped: true, message: "Supabase is not configured." };
+  if (!options.force && process.env.AUTO_SYNC_BUNDLED_DATA !== "true") {
+    return { ok: true, skipped: true, message: "Bundled data auto sync is disabled." };
+  }
   const { hash, data } = await bundledDataSeed();
   const normalizedDb = await readSupabaseNormalizedDb();
   const alreadySynced = (normalizedDb.tables.audit_logs || []).some((log) => (
     log.action === "bundled_data_sync" && log.after_json?.seedHash === hash
   ));
-  if (alreadySynced) return;
+  if (alreadySynced) return { ok: true, skipped: true, message: "Bundled data is already synced.", hash };
 
   applyLegacyCompaniesToNormalized(
     normalizedDb,
     data.companies || [],
-    "system",
+    options.actor || "system",
     `最新スプシ正本のデプロイ同期 ${data.generatedAt || hash.slice(0, 12)}`
   );
   normalizedDb.tables.audit_logs.unshift({
@@ -327,6 +338,52 @@ async function syncBundledDataToSupabaseIfNeeded() {
   });
   const result = await writeSupabaseNormalizedDb(normalizedDb, { scope: "all" });
   console.log(`Bundled data synced to Supabase: ${hash.slice(0, 12)} ${JSON.stringify(result.counts || {})}`);
+  return {
+    ok: true,
+    skipped: false,
+    hash,
+    counts: result.counts,
+    source: {
+      companies: (data.companies || []).length,
+      members: (data.companies || []).reduce((sum, company) => sum + (company.members || []).length, 0),
+      sales: (data.companies || []).reduce((sum, company) => sum + Number(company.sales || 0), 0)
+    }
+  };
+}
+
+function startBundledDataSync(session) {
+  if (bundledDataSyncPromise) return bundledDataSyncStatus;
+  bundledDataSyncStatus = {
+    status: "running",
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    message: "最新スプシ正本を本番DBへ同期中です。",
+    result: null
+  };
+  bundledDataSyncPromise = syncBundledDataToSupabaseIfNeeded({
+    force: true,
+    actor: session?.name || "自社管理者"
+  }).then((result) => {
+    bundledDataSyncStatus = {
+      ...bundledDataSyncStatus,
+      status: result.skipped ? "skipped" : "completed",
+      completedAt: new Date().toISOString(),
+      message: result.message || "最新スプシ正本の同期が完了しました。",
+      result
+    };
+  }).catch((error) => {
+    bundledDataSyncStatus = {
+      ...bundledDataSyncStatus,
+      status: "failed",
+      completedAt: new Date().toISOString(),
+      message: error.publicMessage || error.message || "同期に失敗しました。",
+      result: null
+    };
+    console.error("Bundled data manual sync failed:", error);
+  }).finally(() => {
+    bundledDataSyncPromise = null;
+  });
+  return bundledDataSyncStatus;
 }
 
 async function ensureDb() {
@@ -406,7 +463,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-08-stable-startup-manual-sync", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-08-manual-sheet-sync-ui", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
@@ -415,6 +472,29 @@ async function handleApi(request, response, pathname) {
     if (!session) return true;
     const syncState = await readStoreSyncState(session);
     sendJson(response, 200, { ok: true, ...syncState });
+    return true;
+  }
+
+  if (pathname === "/api/admin/sync-bundled-data" && request.method === "GET") {
+    const session = requireSession(request, response);
+    if (!session) return true;
+    if (!session.permissions.canViewAll || !session.permissions.canEdit) {
+      sendJson(response, 403, { ok: false, message: "admin permission required" });
+      return true;
+    }
+    sendJson(response, 200, { ok: true, sync: bundledDataSyncStatus });
+    return true;
+  }
+
+  if (pathname === "/api/admin/sync-bundled-data" && request.method === "POST") {
+    const session = requireSession(request, response);
+    if (!session) return true;
+    if (!session.permissions.canViewAll || !session.permissions.canEdit) {
+      sendJson(response, 403, { ok: false, message: "admin permission required" });
+      return true;
+    }
+    const sync = startBundledDataSync(session);
+    sendJson(response, 202, { ok: true, sync });
     return true;
   }
 
