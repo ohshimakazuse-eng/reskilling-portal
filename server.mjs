@@ -327,7 +327,7 @@ async function syncBundledDataToSupabaseIfNeeded(options = {}) {
     actor_id: null,
     company_id: null,
     target_type: "platform",
-    target_id: "bundled-data",
+    target_id: crypto.randomUUID(),
     action: "bundled_data_sync",
     before_json: null,
     after_json: {

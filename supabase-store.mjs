@@ -238,11 +238,14 @@ export async function readSupabaseAuditLogEntries(options = {}) {
 export async function hasSupabaseBundledSyncLog(seedHash) {
   const config = supabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");
-  const rows = await requestJson(
-    config,
-    `audit_logs?select=id&action=eq.bundled_data_sync&after_json-%3E%3EseedHash=eq.${encodeURIComponent(seedHash)}&limit=1`
-  );
-  return Boolean(rows?.length);
+  for (const action of ["bundled_data_sync", "direct_data_sync"]) {
+    const rows = await requestJson(
+      config,
+      `audit_logs?select=id&action=eq.${action}&after_json-%3E%3EseedHash=eq.${encodeURIComponent(seedHash)}&limit=1`
+    );
+    if (rows?.length) return true;
+  }
+  return false;
 }
 
 export async function readSupabaseSyncState(options = {}) {
