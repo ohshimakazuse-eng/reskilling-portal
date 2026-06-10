@@ -1641,6 +1641,11 @@ function memberWithDraft(member) {
   };
 }
 
+function hasFormulaAffectingDraft(memberName) {
+  const draft = state.updateDrafts[memberName] || {};
+  return Object.keys(draft).some((key) => milestoneKeys().includes(key));
+}
+
 function calculatedStatus(member) {
   const donePrerequisites = ["daily", "qa", "mtg"].filter((key) => Boolean(member[key])).length;
   if (donePrerequisites === 3) return "S";
@@ -1649,10 +1654,18 @@ function calculatedStatus(member) {
   return "F";
 }
 
+function displayStatusForUpdateSheet(member, effectiveMember = member) {
+  return hasFormulaAffectingDraft(member.name) ? calculatedStatus(effectiveMember) : member.status;
+}
+
 function calculatedProgress(member) {
   const keys = milestoneKeys();
   if (!keys.length) return 0;
   return Math.round((keys.filter((key) => Boolean(member[key])).length / keys.length) * 100);
+}
+
+function displayProgressForUpdateSheet(member, effectiveMember = member) {
+  return hasFormulaAffectingDraft(member.name) ? calculatedProgress(effectiveMember) : Number(member.progress || 0);
 }
 
 function recalculateMemberFormulas(member) {
@@ -1695,7 +1708,7 @@ function renderUpdateSheet() {
   $("#updateSheetBody").innerHTML = members.map((member) => {
     const effectiveMember = memberWithDraft(member);
     const detail = memberDetail(effectiveMember);
-    const status = calculatedStatus(effectiveMember);
+    const status = displayStatusForUpdateSheet(member, effectiveMember);
     const hasDraft = Boolean(state.updateDrafts[member.name]);
     return `
       <tr data-member="${member.name}" class="${status === "F" ? "needs-care" : ""} ${hasDraft ? "has-draft" : ""}">
@@ -1735,7 +1748,9 @@ function renderUpdateCell(member, detail, column, index, effectiveMember = membe
     `;
   }
   if (column.type === "formula") {
-    const value = column.key === "status" ? calculatedStatus(effectiveMember) : `${calculatedProgress(effectiveMember)}%`;
+    const value = column.key === "status"
+      ? displayStatusForUpdateSheet(member, effectiveMember)
+      : `${displayProgressForUpdateSheet(member, effectiveMember)}%`;
     const tone = column.key === "status" ? ` ${value.toLowerCase()}` : "";
     return `<td><span class="formula-chip${tone}">${value}</span><small class="formula-note">自動計算</small></td>`;
   }
@@ -1889,10 +1904,10 @@ function renderDraftReview() {
         const member = company.members.find((item) => item.name === memberName);
         if (!member) return "";
         const effective = memberWithDraft(member);
-        const beforeStatus = calculatedStatus(member);
-        const afterStatus = calculatedStatus(effective);
-        const beforeProgress = calculatedProgress(member);
-        const afterProgress = calculatedProgress(effective);
+        const beforeStatus = member.status;
+        const beforeProgress = Number(member.progress || 0);
+        const afterStatus = displayStatusForUpdateSheet(member, effective);
+        const afterProgress = displayProgressForUpdateSheet(member, effective);
         return `
           <article class="draft-member">
             <div class="draft-member-title">
@@ -2214,14 +2229,17 @@ async function applyUpdateDrafts() {
     Object.entries(state.updateDrafts).forEach(([memberName, fields]) => {
       const member = company.members.find((item) => item.name === memberName);
       if (!member) return;
+      const shouldRecalculate = Object.keys(fields).some((field) => milestoneKeys().includes(field));
       Object.entries(fields).forEach(([field, value]) => {
         updateSheetMember(member, field, value, Boolean(value));
       });
       const beforeStatus = member.status;
       const beforeProgress = member.progress;
-      recalculateMemberFormulas(member);
-      if (beforeStatus !== member.status || beforeProgress !== member.progress) {
-        addDetailUpdate("自動計算", `${member.name} の評価・進捗を自動更新`, `評価 ${member.status} / 進捗 ${member.progress}%`, member);
+      if (shouldRecalculate) {
+        recalculateMemberFormulas(member);
+        if (beforeStatus !== member.status || beforeProgress !== member.progress) {
+          addDetailUpdate("自動計算", `${member.name} の評価・進捗を自動更新`, `評価 ${member.status} / 進捗 ${member.progress}%`, member);
+        }
       }
     });
     recalcCompanyStats(company);
