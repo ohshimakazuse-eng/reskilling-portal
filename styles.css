@@ -1,20 +1,20 @@
 :root {
-  --bg: #eef3f8;
+  --bg: #eef3f7;
   --surface: #ffffff;
-  --surface-2: #f4f8fb;
-  --ink: #0d1b2a;
-  --muted: #526579;
-  --line: #c8d4e0;
-  --accent: #0e5f88;
-  --accent-2: #1f8f6a;
-  --warn: #b45f06;
+  --surface-2: #f6f8fb;
+  --ink: #0b2542;
+  --muted: #52657a;
+  --line: #cbd6e2;
+  --accent: #0b3d66;
+  --accent-2: #f47a1f;
+  --warn: #c45f12;
   --danger: #bd2f2a;
-  --soft-blue: #dcecf4;
-  --soft-green: #ddf1e9;
+  --soft-blue: #dceaf3;
+  --soft-green: #fff0df;
   --soft-red: #f9e1df;
-  --soft-yellow: #f8ebc9;
-  --shadow: 0 18px 44px rgba(13, 27, 42, 0.11);
-  --shadow-soft: 0 8px 22px rgba(13, 27, 42, 0.08);
+  --soft-yellow: #ffe8c7;
+  --shadow: 0 18px 44px rgba(11, 37, 66, 0.12);
+  --shadow-soft: 0 8px 22px rgba(11, 37, 66, 0.08);
 }
 
 * {
@@ -24,7 +24,7 @@
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, #dce8f0 0, #f5f8fb 260px, var(--bg) 520px),
+    linear-gradient(180deg, #dce8f2 0, #f8fafc 260px, var(--bg) 520px),
     var(--bg);
   color: var(--ink);
   font-family: Inter, "Noto Sans JP", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -44,8 +44,8 @@ select {
   place-items: center;
   padding: 24px;
   background:
-    linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(35, 87, 214, 0.58)),
-    #0f172a;
+    linear-gradient(135deg, rgba(8, 28, 50, 0.95), rgba(11, 61, 102, 0.76) 58%, rgba(244, 122, 31, 0.42)),
+    #081c32;
 }
 
 .auth-screen.hidden {
@@ -174,8 +174,8 @@ select {
   height: 100vh;
   padding: 22px 18px;
   background:
-    linear-gradient(180deg, rgba(21, 96, 130, 0.24), rgba(31, 143, 106, 0.12)),
-    #0d1b2a;
+    linear-gradient(180deg, rgba(244, 122, 31, 0.13), rgba(11, 61, 102, 0.22)),
+    #081c32;
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -391,8 +391,8 @@ textarea {
 select:focus,
 input:focus,
 textarea:focus {
-  outline: 3px solid rgba(29, 92, 255, 0.16);
-  border-color: rgba(29, 92, 255, 0.5);
+  outline: 3px solid rgba(244, 122, 31, 0.18);
+  border-color: rgba(244, 122, 31, 0.55);
 }
 
 textarea {
@@ -798,7 +798,7 @@ button.simple-row:hover {
 }
 
 .focus-member:hover {
-  border-color: rgba(29, 92, 255, 0.38);
+  border-color: rgba(244, 122, 31, 0.42);
   background: #f3f7ff;
   transform: translateY(-1px);
   text-decoration: none;
@@ -871,7 +871,7 @@ button.simple-row:hover {
 }
 
 .company-rank-row:hover {
-  border-color: rgba(29, 92, 255, 0.38);
+  border-color: rgba(244, 122, 31, 0.42);
   background: #f3f7ff;
   transform: translateY(-1px);
 }
@@ -1201,7 +1201,7 @@ button.simple-row:hover {
 }
 
 .pill {
-  border: 1px solid rgba(35, 87, 214, 0.12);
+  border: 1px solid rgba(11, 61, 102, 0.14);
   background: var(--soft-blue);
   color: var(--accent);
 }
@@ -1240,11 +1240,11 @@ button.simple-row:hover {
   min-width: 18px;
   max-width: 42px;
   border-radius: 6px 6px 0 0;
-  background: linear-gradient(180deg, #0e5f88, #78b8d0);
+  background: linear-gradient(180deg, #0b3d66, #5d8ead);
 }
 
 .bar.current {
-  background: linear-gradient(180deg, #1f8f6a, #83ccb0);
+  background: linear-gradient(180deg, #f47a1f, #ffc075);
 }
 
 .bar.empty {
@@ -1253,7 +1253,7 @@ button.simple-row:hover {
 }
 
 .bar.current.empty {
-  background: linear-gradient(180deg, #1f8f6a, #83ccb0);
+  background: linear-gradient(180deg, #f47a1f, #ffc075);
   opacity: 0.45;
 }
 
@@ -1496,15 +1496,15 @@ button.simple-row:hover {
   border: 0;
   border-radius: 8px;
   padding: 0 16px;
-  background: var(--accent);
+  background: linear-gradient(180deg, #ff8a2a, var(--accent-2));
   color: #ffffff;
   font-weight: 850;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(35, 87, 214, 0.18);
+  box-shadow: 0 8px 18px rgba(244, 122, 31, 0.24);
 }
 
 .primary-button:hover {
-  background: #0a4d70;
+  background: linear-gradient(180deg, #ff9a45, #d85f0f);
 }
 
 .primary-button.small {
@@ -1747,7 +1747,7 @@ td {
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(29, 92, 255, 0.08), rgba(21, 154, 99, 0.05)),
+    linear-gradient(135deg, rgba(11, 61, 102, 0.08), rgba(244, 122, 31, 0.06)),
     #ffffff;
   box-shadow: var(--shadow-soft);
 }
@@ -2409,7 +2409,7 @@ td {
 }
 
 .account-open-button:hover {
-  background: #0a4d70;
+  background: #082f52;
 }
 
 .account-link-card em {
@@ -2662,11 +2662,11 @@ td {
   max-width: 30px;
   min-width: 8px;
   border-radius: 6px 6px 0 0;
-  background: linear-gradient(180deg, #1f8f6a, #79c6a8);
+  background: linear-gradient(180deg, #f47a1f, #ffc075);
 }
 
 .mini-chart.sales .mini-bar {
-  background: linear-gradient(180deg, #0e5f88, #75b6d0);
+  background: linear-gradient(180deg, #0b3d66, #5d8ead);
 }
 
 .meeting-list {
