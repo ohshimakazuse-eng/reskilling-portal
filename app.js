@@ -584,6 +584,11 @@ const state = {
   sheetSyncStatus: null,
   isSaving: false,
   isRefreshing: false,
+  progressReportDraft: {
+    companyId: "",
+    dirty: false,
+    values: null
+  },
   updateDrafts: {},
   detailFeed: [],
   operationFeed: [
@@ -1349,6 +1354,45 @@ function activeProgressReport(company) {
   };
 }
 
+function progressReportFormValues() {
+  return {
+    good: $("#progressGood")?.value || "",
+    issue: $("#progressIssue")?.value || "",
+    action: $("#progressAction")?.value || "",
+    request: $("#progressRequest")?.value || ""
+  };
+}
+
+function setProgressReportFormValues(values) {
+  [
+    ["#progressGood", values.good],
+    ["#progressIssue", values.issue],
+    ["#progressAction", values.action],
+    ["#progressRequest", values.request]
+  ].forEach(([selector, value]) => {
+    const field = $(selector);
+    if (field && field.value !== String(value || "")) field.value = value || "";
+  });
+}
+
+function rememberProgressReportDraft() {
+  const company = selectedCompany();
+  if (!company) return;
+  state.progressReportDraft = {
+    companyId: company.id,
+    dirty: true,
+    values: progressReportFormValues()
+  };
+}
+
+function resetProgressReportDraft(companyId = "") {
+  state.progressReportDraft = {
+    companyId,
+    dirty: false,
+    values: null
+  };
+}
+
 function renderExecutiveSummary() {
   const company = selectedCompany();
   const members = company.members;
@@ -1358,6 +1402,9 @@ function renderExecutiveSummary() {
   const build = members.filter((member) => member.stage === "構築").length;
   const blockers = topBlockers(members, 3);
   const report = activeProgressReport(company);
+  if (state.progressReportDraft.companyId && state.progressReportDraft.companyId !== company.id) {
+    resetProgressReportDraft(company.id);
+  }
 
   $("#execStatusPill").textContent = verdict.label;
   $("#execStatusPill").className = `pill ${verdict.tone === "danger" ? "danger" : ""}`;
@@ -1374,10 +1421,10 @@ function renderExecutiveSummary() {
     </article>
   `).join("");
   $("#progressReportForm").style.display = roleCanEditProgressReport() ? "" : "none";
-  $("#progressGood").value = report.good;
-  $("#progressIssue").value = report.issue;
-  $("#progressAction").value = report.action;
-  $("#progressRequest").value = report.request;
+  const editorValues = state.progressReportDraft.companyId === company.id && state.progressReportDraft.dirty
+    ? state.progressReportDraft.values
+    : report;
+  setProgressReportFormValues(editorValues);
 
   renderStageDonut(pr, build, members.length);
   renderStatusTable(statusCounts(members), members.length);
@@ -2814,6 +2861,7 @@ function bindEvents() {
   $("#companySelect").addEventListener("change", (event) => {
     state.companyId = event.target.value;
     state.updateDrafts = {};
+    resetProgressReportDraft(state.companyId);
     renderAll();
   });
 
@@ -2856,8 +2904,15 @@ function bindEvents() {
       action: $("#progressAction").value.trim(),
       request: $("#progressRequest").value.trim()
     };
+    resetProgressReportDraft(company.id);
     addOperation("進捗報告", "今月の進捗を更新", "会社ページの進捗報告を保存して反映");
     void persistAndRefresh(null, `${company.name}: 今月の進捗を更新`);
+  });
+
+  $("#progressReportForm").addEventListener("input", (event) => {
+    if (!roleCanEditProgressReport()) return;
+    if (!event.target.matches("textarea")) return;
+    rememberProgressReportDraft();
   });
 
   $$(".table-sort").forEach((button) => {
