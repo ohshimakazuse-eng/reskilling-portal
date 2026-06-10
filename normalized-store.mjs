@@ -138,20 +138,17 @@ function latestReportForCompany(tables, companyId) {
     .sort((a, b) => String(b.report_month).localeCompare(String(a.report_month)) || String(b.updated_at).localeCompare(String(a.updated_at)))[0];
 }
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function snapshotCompanyTables(tables, companyId) {
+function companyTableCounts(tables, companyId) {
+  const memberIds = new Set(tables.members.filter((member) => member.company_id === companyId).map((member) => member.id));
   return {
-    company: clone(tables.companies.find((company) => company.id === companyId) || null),
-    summaries: clone(tables.company_monthly_summaries.filter((summary) => summary.company_id === companyId)),
-    reports: clone((tables.client_reports || []).filter((report) => report.company_id === companyId)),
-    members: clone(tables.members.filter((member) => member.company_id === companyId)),
-    accounts: clone(tables.member_accounts.filter((account) => tables.members.some((member) => member.company_id === companyId && member.id === account.member_id))),
-    milestones: clone(tables.member_milestones.filter((milestone) => tables.members.some((member) => member.company_id === companyId && member.id === milestone.member_id))),
-    metrics: clone(tables.member_metrics.filter((metric) => tables.members.some((member) => member.company_id === companyId && member.id === metric.member_id))),
-    sessions: clone(tables.coaching_sessions.filter((session) => session.company_id === companyId))
+    members: memberIds.size,
+    activeMembers: tables.members.filter((member) => member.company_id === companyId && !member.deleted_at).length,
+    accounts: tables.member_accounts.filter((account) => memberIds.has(account.member_id)).length,
+    milestones: tables.member_milestones.filter((milestone) => memberIds.has(milestone.member_id)).length,
+    metrics: tables.member_metrics.filter((metric) => memberIds.has(metric.member_id)).length,
+    sessions: tables.coaching_sessions.filter((session) => session.company_id === companyId && !session.deleted_at).length,
+    summaries: tables.company_monthly_summaries.filter((summary) => summary.company_id === companyId).length,
+    reports: (tables.client_reports || []).filter((report) => report.company_id === companyId).length
   };
 }
 
@@ -499,7 +496,7 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
 
   legacyCompanies.forEach((legacyCompany) => {
     const existingCompany = tables.companies.find((item) => item.code === legacyCompany.id);
-    const beforeSnapshot = existingCompany ? snapshotCompanyTables(tables, existingCompany.id) : null;
+    const beforeCounts = existingCompany ? companyTableCounts(tables, existingCompany.id) : null;
     const company = findOrCreateCompany(tables, legacyCompany);
     const reportMonth = company.report_month;
     company.name = legacyCompany.name;
@@ -615,14 +612,14 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
       target_type: "company",
       target_id: company.id,
       action: "update",
-      before_json: beforeSnapshot,
+      before_json: beforeCounts,
       after_json: {
         source: "frontend",
         actor,
         summary,
         members: activeMembers.length,
         sales: summaryRow.total_sales_amount,
-        snapshot: snapshotCompanyTables(tables, company.id)
+        counts: companyTableCounts(tables, company.id)
       },
       created_at: now
     });

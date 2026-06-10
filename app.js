@@ -161,6 +161,7 @@ function isLocalEnvironment() {
 
 function handleSessionExpired() {
   clearAuthSession();
+  localStorage.removeItem(PLATFORM_STORAGE_KEY);
   state.session = null;
   state.role = "admin";
   state.updateDrafts = {};
@@ -210,7 +211,7 @@ async function savePlatformData(summary = "platform save", options = {}) {
       companies: companyData
     }));
     if (apiAvailable()) {
-      await saveCompaniesToApi({
+      const response = await saveCompaniesToApi({
           actor: state.session?.name || "prototype",
           session: state.session,
           summary,
@@ -218,6 +219,12 @@ async function savePlatformData(summary = "platform save", options = {}) {
           companyId: saveScope === "company" ? company?.id : "",
           companies: companyData
       });
+      try {
+        const payload = await response.json();
+        if (payload?.updatedAt) state.platformUpdatedAt = payload.updatedAt;
+      } catch {
+        // サーバ時刻が取れなくても保存自体は成功している
+      }
     }
     return true;
   } catch (error) {
@@ -484,7 +491,12 @@ function ensureMonthlyScheduleState() {
   const hasOlderPeriod = list.some((company) => company.monthlyPeriod && company.monthlyPeriod !== monthKey);
   if (hasOlderPeriod) {
     const changed = resetCurrentMonthNumbers({ force: false, persist: false });
-    if (changed) void savePlatformData(`${monthKey}: 月替わり自動リセット`, { scope: "all" });
+    if (changed) {
+      savePlatformData(`${monthKey}: 月替わり自動リセット`, { scope: "all" }).catch((error) => {
+        console.warn("Monthly auto reset save failed.", error);
+        showSaveStatus("月次リセットの保存に失敗しました", false);
+      });
+    }
     return changed;
   }
   let initialized = false;
@@ -500,16 +512,57 @@ function ensureMonthlyScheduleState() {
       }
     });
   });
-  if (initialized) void savePlatformData(`${monthKey}: 月次管理キー初期化`, { scope: "all" });
+  if (initialized) {
+    savePlatformData(`${monthKey}: 月次管理キー初期化`, { scope: "all" }).catch((error) => {
+      console.warn("Monthly schedule init save failed.", error);
+    });
+  }
   return false;
+}
+
+function saveErrorMessage(error) {
+  if ([401, 403].includes(error?.status)) {
+    return "ログイン状態が切れています。もう一度ログインしてから保存してください。";
+  }
+  if (error?.detail?.code === "database_unavailable") {
+    return "DBが一時的に応答していません。30秒ほど待ってから、もう一度保存してください。";
+  }
+  return `保存に失敗しました。少し待ってからもう一度お試しください。${error?.detail?.message ? `\n理由: ${error.detail.message}` : ""}`;
+}
+
+function showSaveStatus(message, ok = true) {
+  let toast = $("#saveStatusToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "saveStatusToast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.className = ok ? "save-toast ok" : "save-toast error";
+  clearTimeout(showSaveStatus._timer);
+  showSaveStatus._timer = setTimeout(() => {
+    toast.className = "save-toast hidden";
+  }, ok ? 3500 : 8000);
 }
 
 async function persistAndRefresh(member, summary, options = {}) {
   regenerateAutoConclusions(member ? [member] : selectedCompany()?.members || []);
-  await savePlatformData(summary, options);
+  try {
+    await savePlatformData(summary, options);
+  } catch (error) {
+    if ([401, 403].includes(error?.status)) handleSessionExpired();
+    showSaveStatus("保存に失敗しました", false);
+    window.alert(saveErrorMessage(error));
+    // サーバの正データを取り直して画面と本番DBのズレを解消する
+    await hydratePlatformDataFromApi({ force: true, reason: "save-failed" });
+    renderAll();
+    return false;
+  }
+  showSaveStatus("保存しました。全端末に反映されます。", true);
   renderAll();
   if (member) openMemberDetail(member);
   if (apiAvailable()) setTimeout(renderAuditLogs, 450);
+  return true;
 }
 
 const initialSession = loadAuthSession();
@@ -908,6 +961,7 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
 
 function logoutUser() {
   clearAuthSession();
+  localStorage.removeItem(PLATFORM_STORAGE_KEY);
   state.session = null;
   state.role = "admin";
   companyData = cloneData(importedCompanyData);
@@ -2127,6 +2181,7 @@ async function applyUpdateDrafts() {
     regenerateAutoConclusions(company.members || []);
     await savePlatformData(`${company.name}: ${people}名 / ${count}項目を更新`);
     state.updateDrafts = {};
+    showSaveStatus(`保存しました。${people}名 / ${count}項目を全端末に反映します。`, true);
     renderAll();
     if (apiAvailable()) setTimeout(renderAuditLogs, 450);
   } catch (error) {
@@ -2139,6 +2194,7 @@ async function applyUpdateDrafts() {
     }));
     renderAll();
     if ([401, 403].includes(error?.status)) handleSessionExpired();
+    showSaveStatus("保存に失敗しました", false);
     const message = [401, 403].includes(error?.status)
       ? "ログイン状態が切れています。もう一度ログインしてから「保存して反映」を押してください。"
       : error?.detail?.code === "database_unavailable"

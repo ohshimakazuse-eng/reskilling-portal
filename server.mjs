@@ -14,7 +14,9 @@ import {
   writeNormalizedDb
 } from "./normalized-store.mjs";
 import {
+  hasSupabaseBundledSyncLog,
   isSupabaseConfigured,
+  readSupabaseAuditLogEntries,
   readSupabaseNormalizedDb,
   readSupabaseSyncState,
   writeSupabaseNormalizedDb
@@ -37,6 +39,8 @@ let bundledDataSyncStatus = {
   result: null
 };
 const nonClientCompanyIds = new Set(["nh", "vv"]);
+// 画面表示・保存マージに不要な重いテーブル（監査ログ等）はSupabaseから読み込まない
+const heavyReadExcludedTables = ["app_users", "company_users", "update_batches", "audit_logs"];
 const isProduction = process.env.NODE_ENV === "production";
 const devAdminPassword = ["admin", "123"].join("");
 const devOperatorPassword = ["operator", "123"].join("");
@@ -258,9 +262,10 @@ function loginBodyFromRequest(request) {
 
 function createLoginSession(body, companies, resolved) {
   const { user: demoUser, company } = resolved;
+  // 管理者/運用者はDBが空（初回同期前）でもログインできるようにする
   const session = {
     role: demoUser.role,
-    companyId: demoUser.canViewAll ? body.companyId || company.id : company.id,
+    companyId: demoUser.canViewAll ? body.companyId || company?.id || "" : company.id,
     companyIds: demoUser.canViewAll ? companies.map((item) => item.id) : [company.id],
     name: demoUser.canViewAll ? demoUser.name : `${company.name} ${demoUser.name}`,
     permissions: {
@@ -301,16 +306,14 @@ async function bundledDataSeed() {
 }
 
 async function syncBundledDataToSupabaseIfNeeded(options = {}) {
-  if (!isSupabaseConfigured()) return { ok: false, skipped: true, message: "Supabase is not configured." };
   if (!options.force && process.env.AUTO_SYNC_BUNDLED_DATA !== "true") {
     return { ok: true, skipped: true, message: "Bundled data auto sync is disabled." };
   }
+  if (!isSupabaseConfigured()) return { ok: false, skipped: true, message: "Supabase is not configured." };
   const { hash, data } = await bundledDataSeed();
-  const normalizedDb = await readSupabaseNormalizedDb();
-  const alreadySynced = (normalizedDb.tables.audit_logs || []).some((log) => (
-    log.action === "bundled_data_sync" && log.after_json?.seedHash === hash
-  ));
-  if (alreadySynced) return { ok: true, skipped: true, message: "Bundled data is already synced.", hash };
+  const alreadySynced = await hasSupabaseBundledSyncLog(hash);
+  if (alreadySynced) return { ok: true, skipped: true, message: "この内容はすでに本番DBへ反映済みです。", hash };
+  const normalizedDb = await readSupabaseNormalizedDb({ excludeTables: heavyReadExcludedTables });
 
   applyLegacyCompaniesToNormalized(
     normalizedDb,
@@ -458,12 +461,12 @@ function storageName() {
 
 async function handleApi(request, response, pathname) {
   if (pathname === "/api/health" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, storage: storageName(), publicUrl, dbPath, normalizedDbPath: join(dbDir, "normalized-db.json"), supabase: isSupabaseConfigured() });
+    sendJson(response, 200, { ok: true, storage: storageName(), supabase: isSupabaseConfigured() });
     return true;
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-08-manual-sheet-sync-ui", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-10-launch-hardening", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
@@ -536,7 +539,9 @@ async function handleApi(request, response, pathname) {
     }
     const session = requireSession(request, response);
     if (!session) return true;
-    const readOptions = session.permissions.canViewAll ? {} : { companyCodes: [session.companyId] };
+    const readOptions = session.permissions.canViewAll
+      ? { excludeTables: heavyReadExcludedTables }
+      : { companyCodes: [session.companyId], excludeTables: heavyReadExcludedTables };
     const { db, normalizedDb, companies } = await hydratedCompaniesForSession(session, readOptions);
     const syncState = await readStoreSyncState(session);
     sendJson(response, 200, clientSafePayload({ ok: true, months: db.months, companies, updatedAt: syncState.updatedAt || normalizedDb.updatedAt, storage: storageName(), permissions: session.permissions }, session));
@@ -562,10 +567,12 @@ async function handleApi(request, response, pathname) {
     }
     let saveResult;
     let updatedAt;
-    companyWriteQueue = companyWriteQueue.then(async () => {
+    const writeTask = companyWriteQueue.then(async () => {
       const saveScope = body.scope === "all" ? "all" : "company";
       const scopedCompanyId = String(body.companyId || session.companyId || "");
-      const readOptions = saveScope === "company" ? { companyCodes: [scopedCompanyId] } : {};
+      const readOptions = saveScope === "company"
+        ? { companyCodes: [scopedCompanyId], excludeTables: heavyReadExcludedTables }
+        : { excludeTables: heavyReadExcludedTables };
       const { db, normalizedDb, companies: currentCompanies } = await hydratedCompaniesForSession(null, readOptions);
       const incomingById = new Map(body.companies.map((company) => [company.id, company]));
       let mergedCompanies = currentCompanies;
@@ -618,10 +625,11 @@ async function handleApi(request, response, pathname) {
       });
       updatedAt = saveResult?.updatedAt || normalizedDb.updatedAt;
     });
+    // 1件の保存失敗が後続リクエストの保存を巻き込まないよう、キュー自体は常に解決させる
+    companyWriteQueue = writeTask.then(() => {}, () => {});
     try {
-      await companyWriteQueue;
+      await writeTask;
     } catch (error) {
-      companyWriteQueue = Promise.resolve();
       const { statusCode, payload } = apiErrorPayload(error);
       sendJson(response, statusCode, payload);
       return true;
@@ -633,14 +641,31 @@ async function handleApi(request, response, pathname) {
   if (pathname === "/api/audit-logs" && request.method === "GET") {
     const session = requireSession(request, response);
     if (!session) return true;
+    if (isSupabaseConfigured()) {
+      const logs = await readSupabaseAuditLogEntries({
+        companyCodes: session.permissions.canViewAll ? [] : [session.companyId],
+        limit: 100
+      });
+      const auditLogs = logs.map((log) => ({
+        id: log.id,
+        action: log.action,
+        actor: log.log_actor || log.actor_id || "system",
+        createdAt: log.created_at,
+        summary: log.log_summary
+          || (log.log_members ? `${log.log_source_file || "DB"}: ${log.log_members}名を反映` : log.action)
+      }));
+      sendJson(response, 200, clientSafePayload({ ok: true, auditLogs }, session));
+      return true;
+    }
     const db = await readDb();
-    const normalizedDb = await readStoreDb();
+    const normalizedDb = await readStoreDb({ excludeTables: heavyReadExcludedTables });
     const normalizedLogs = normalizedDb.tables.audit_logs.map((log) => ({
       id: log.id,
       action: log.action,
-      actor: log.actor_id || "system",
+      actor: log.after_json?.actor || log.actor_id || "system",
       createdAt: log.created_at,
-      summary: log.after_json ? `${log.after_json.sourceFile || "DB"}: ${log.after_json.members || 0}名を移行` : log.action
+      summary: log.after_json?.summary
+        || (log.after_json ? `${log.after_json.sourceFile || "DB"}: ${log.after_json.members || 0}名を反映` : log.action)
     }));
     const scopedLogs = session.permissions.canViewAll
       ? normalizedLogs
@@ -657,7 +682,7 @@ async function handleApi(request, response, pathname) {
   if (pathname === "/api/v2/companies" && request.method === "GET") {
     const session = requireSession(request, response);
     if (!session) return true;
-    const normalizedDb = await readStoreDb();
+    const normalizedDb = await readStoreDb({ excludeTables: heavyReadExcludedTables });
     const companies = normalizedDb.tables.companies
       .filter((company) => !company.deleted_at)
       .filter((company) => session.permissions.canViewAll || company.code === session.companyId);
@@ -674,7 +699,7 @@ async function handleApi(request, response, pathname) {
       sendJson(response, 403, { ok: false, message: "company scope violation" });
       return true;
     }
-    const normalizedDb = await readStoreDb();
+    const normalizedDb = await readStoreDb({ excludeTables: heavyReadExcludedTables });
     const dashboard = normalizedCompanyDashboard(normalizedDb, requestedCompany);
     if (!dashboard) {
       sendJson(response, 404, { ok: false, message: "company not found" });
@@ -693,7 +718,7 @@ async function handleApi(request, response, pathname) {
       sendJson(response, 403, { ok: false, message: "company scope violation" });
       return true;
     }
-    const normalizedDb = await readStoreDb();
+    const normalizedDb = await readStoreDb({ excludeTables: heavyReadExcludedTables });
     const members = normalizedMembers(normalizedDb, requestedCompany);
     if (!members) {
       sendJson(response, 404, { ok: false, message: "company not found" });
@@ -707,7 +732,7 @@ async function handleApi(request, response, pathname) {
   if (memberMatch && request.method === "GET") {
     const session = requireSession(request, response);
     if (!session) return true;
-    const normalizedDb = await readStoreDb();
+    const normalizedDb = await readStoreDb({ excludeTables: heavyReadExcludedTables });
     const detail = normalizedMemberDetail(normalizedDb, decodeURIComponent(memberMatch[1]));
     if (!detail) {
       sendJson(response, 404, { ok: false, message: "member not found" });
@@ -784,6 +809,9 @@ const server = createServer(async (request, response) => {
 
 async function startServer() {
   await ensureDb();
+  // RenderのLBはアイドル接続を約100秒保持するため、Node側のkeep-aliveを長く取り502を防ぐ
+  server.keepAliveTimeout = 120000;
+  server.headersTimeout = 125000;
   server.listen(port, host, () => {
     const displayHost = host === "0.0.0.0" ? "localhost" : host;
     console.log(`Reskilling Portal server: ${publicUrl || `http://${displayHost}:${port}`}`);

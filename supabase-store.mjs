@@ -156,55 +156,11 @@ function rowsForCompanyScope(db, companyCodes = []) {
   };
 }
 
-export async function readSupabaseNormalizedDb(options = {}) {
-  const config = supabaseConfig();
-  if (!config) throw new Error("Supabase is not configured.");
-  if (options.companiesOnly) {
-    const tables = Object.fromEntries(tablePlan.map(([table]) => [table, []]));
-    tables.companies = await fetchAll(config, "companies");
-    return {
-      version: 2,
-      createdAt: null,
-      updatedAt: new Date().toISOString(),
-      source: "supabase",
-      generatedAt: null,
-      tables
-    };
-  }
-  if (options.companyCodes?.length) {
-    const tables = Object.fromEntries(tablePlan.map(([table]) => [table, []]));
-    const allCompanies = await fetchAll(config, "companies");
-    tables.companies = allCompanies.filter((company) => options.companyCodes.includes(company.code));
-    const companyIds = tables.companies.map((company) => company.id);
-    if (companyIds.length) {
-      const companyFilter = inFilter(companyIds);
-      tables.company_users = await fetchAll(config, "company_users", `select=*&company_id=${companyFilter}`);
-      tables.members = await fetchAll(config, "members", `select=*&company_id=${companyFilter}`);
-      const memberIds = tables.members.map((member) => member.id);
-      if (memberIds.length) {
-        const memberFilter = inFilter(memberIds);
-        tables.member_accounts = await fetchAll(config, "member_accounts", `select=*&member_id=${memberFilter}`);
-        tables.member_milestones = await fetchAll(config, "member_milestones", `select=*&member_id=${memberFilter}`);
-        tables.member_metrics = await fetchAll(config, "member_metrics", `select=*&member_id=${memberFilter}`);
-        tables.coaching_sessions = await fetchAll(config, "coaching_sessions", `select=*&member_id=${memberFilter}`);
-      }
-      tables.company_monthly_summaries = await fetchAll(config, "company_monthly_summaries", `select=*&company_id=${companyFilter}`);
-      tables.client_reports = await fetchAll(config, "client_reports", `select=*&company_id=${companyFilter}`);
-      tables.audit_logs = await fetchAll(config, "audit_logs", `select=*&company_id=${companyFilter}`);
-    }
-    return {
-      version: 2,
-      createdAt: null,
-      updatedAt: new Date().toISOString(),
-      source: "supabase",
-      generatedAt: null,
-      tables
-    };
-  }
-  const tables = {};
-  for (const [table] of tablePlan) {
-    tables[table] = await fetchAll(config, table);
-  }
+function emptyTables() {
+  return Object.fromEntries(tablePlan.map(([table]) => [table, []]));
+}
+
+function asNormalizedDb(tables) {
   return {
     version: 2,
     createdAt: null,
@@ -213,6 +169,80 @@ export async function readSupabaseNormalizedDb(options = {}) {
     generatedAt: null,
     tables
   };
+}
+
+export async function readSupabaseNormalizedDb(options = {}) {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  const excluded = new Set(options.excludeTables || []);
+  if (options.companiesOnly) {
+    const tables = emptyTables();
+    tables.companies = await fetchAll(config, "companies");
+    return asNormalizedDb(tables);
+  }
+  if (options.companyCodes?.length) {
+    const tables = emptyTables();
+    const allCompanies = await fetchAll(config, "companies");
+    tables.companies = allCompanies.filter((company) => options.companyCodes.includes(company.code));
+    const companyIds = tables.companies.map((company) => company.id);
+    if (companyIds.length) {
+      const companyFilter = inFilter(companyIds);
+      const fetchScoped = (table, query) => excluded.has(table)
+        ? Promise.resolve([])
+        : fetchAll(config, table, query);
+      [tables.company_users, tables.members, tables.company_monthly_summaries, tables.client_reports, tables.audit_logs] = await Promise.all([
+        fetchScoped("company_users", `select=*&company_id=${companyFilter}`),
+        fetchScoped("members", `select=*&company_id=${companyFilter}`),
+        fetchScoped("company_monthly_summaries", `select=*&company_id=${companyFilter}`),
+        fetchScoped("client_reports", `select=*&company_id=${companyFilter}`),
+        fetchScoped("audit_logs", `select=*&company_id=${companyFilter}`)
+      ]);
+      const memberIds = tables.members.map((member) => member.id);
+      if (memberIds.length) {
+        const memberFilter = inFilter(memberIds);
+        [tables.member_accounts, tables.member_milestones, tables.member_metrics, tables.coaching_sessions] = await Promise.all([
+          fetchScoped("member_accounts", `select=*&member_id=${memberFilter}`),
+          fetchScoped("member_milestones", `select=*&member_id=${memberFilter}`),
+          fetchScoped("member_metrics", `select=*&member_id=${memberFilter}`),
+          fetchScoped("coaching_sessions", `select=*&member_id=${memberFilter}`)
+        ]);
+      }
+    }
+    return asNormalizedDb(tables);
+  }
+  const tables = emptyTables();
+  await Promise.all(tablePlan.map(async ([table]) => {
+    if (excluded.has(table)) return;
+    tables[table] = await fetchAll(config, table);
+  }));
+  return asNormalizedDb(tables);
+}
+
+export async function readSupabaseAuditLogEntries(options = {}) {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  const limit = Number(options.limit || 100);
+  const columns = "id,action,actor_id,company_id,created_at,"
+    + "log_summary:after_json->>summary,log_actor:after_json->>actor,"
+    + "log_source_file:after_json->>sourceFile,log_members:after_json->>members";
+  let companyFilter = "";
+  if (options.companyCodes?.length) {
+    const companies = await fetchAll(config, "companies", `select=id,code&code=${inFilter(options.companyCodes)}`);
+    const companyIds = companies.map((company) => company.id);
+    if (!companyIds.length) return [];
+    companyFilter = `&company_id=${inFilter(companyIds)}`;
+  }
+  return await requestJson(config, `audit_logs?select=${columns}${companyFilter}&order=created_at.desc&limit=${limit}`) || [];
+}
+
+export async function hasSupabaseBundledSyncLog(seedHash) {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  const rows = await requestJson(
+    config,
+    `audit_logs?select=id&action=eq.bundled_data_sync&after_json-%3E%3EseedHash=eq.${encodeURIComponent(seedHash)}&limit=1`
+  );
+  return Boolean(rows?.length);
 }
 
 export async function readSupabaseSyncState(options = {}) {

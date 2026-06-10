@@ -3333,3 +3333,32 @@ td {
     padding: 12px;
   }
 }
+
+.save-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 9999;
+  max-width: 340px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25);
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+
+.save-toast.ok {
+  background: #15803d;
+}
+
+.save-toast.error {
+  background: #b91c1c;
+}
+
+.save-toast.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
