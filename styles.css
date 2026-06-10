@@ -202,6 +202,16 @@ select {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
 }
 
+.brand-logo {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
 .brand p,
 .brand span,
 .eyebrow,
@@ -2919,6 +2929,13 @@ td {
     width: 34px;
     height: 34px;
     font-size: 13px;
+  }
+
+  .brand-logo {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    border-radius: 8px;
   }
 
   .brand p {

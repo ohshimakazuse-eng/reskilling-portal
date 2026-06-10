@@ -66,7 +66,9 @@ const mimeTypes = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
-  ".png": "image/png"
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg"
 };
 
 const blockedFileExtensions = new Set([".md", ".mjs", ".py", ".sql", ".xlsx", ".csv", ".json", ".ndjson", ".bak"]);
