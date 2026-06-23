@@ -329,6 +329,8 @@ async function syncBundledDataToSupabaseIfNeeded(options = {}) {
     actor_id: null,
     company_id: null,
     target_type: "platform",
+    // target_id は uuid 型。非uuidを入れると同じ書き込みチャンクの監査ログが全件失敗するため、
+    // プラットフォーム単位の同期では一意なuuidを採番する（識別子は after_json.seedHash 側に保持）。
     target_id: crypto.randomUUID(),
     action: "bundled_data_sync",
     before_json: null,
@@ -468,7 +470,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-23-smooth-logout", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-23-mtg-log-fix", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 

@@ -514,24 +514,16 @@ function ensureMonthlyScheduleState() {
     }
     return changed;
   }
-  let initialized = false;
+  // monthlyPeriod はクライアント側だけで保持する進行管理マーカー。
+  // ハイドレートのたびに undefined に戻るため、これを埋めるためだけにDB保存すると
+  // ログインのたびに全社scope保存が走り、更新ログが大量の自動エントリで埋まってしまう。
+  // よってマーカーはローカルにだけ設定し、保存はしない（実データは変更しない）。
   list.forEach((company) => {
-    if (!company.monthlyPeriod) {
-      company.monthlyPeriod = monthKey;
-      initialized = true;
-    }
+    if (!company.monthlyPeriod) company.monthlyPeriod = monthKey;
     (company.members || []).forEach((member) => {
-      if (!member.monthlyPeriod) {
-        member.monthlyPeriod = monthKey;
-        initialized = true;
-      }
+      if (!member.monthlyPeriod) member.monthlyPeriod = monthKey;
     });
   });
-  if (initialized) {
-    savePlatformData(`${monthKey}: 月次管理キー初期化`, { scope: "all" }).catch((error) => {
-      console.warn("Monthly schedule init save failed.", error);
-    });
-  }
   return false;
 }
 
@@ -3051,7 +3043,8 @@ function bindEvents() {
     });
     state.mtgMemberName = member.name;
     addDetailUpdate("MTG", `${member.name} のMTGを登録`, `${$("#mtgDate").value} / ${$("#mtgResult").value} / ${$("#mtgContent").value}`, member);
-    void persistAndRefresh();
+    // member は渡さない（更新タブで詳細オーバーレイを開かないため）。サマリで更新ログに明示する
+    void persistAndRefresh(null, `${selectedCompany().name}: ${member.name} のMTGを登録`);
   });
 
   $("#detailMeetingForm").addEventListener("submit", (event) => {
