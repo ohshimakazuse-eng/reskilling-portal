@@ -132,6 +132,9 @@ function loadPlatformData() {
 }
 
 let companyData = loadPlatformData();
+// ログイン/ログアウトのたびに加算する世代カウンタ。
+// 通信中（await中）にログアウトされた場合、古い応答を破棄するために使う。
+let sessionEpoch = 0;
 
 function mergeImportedAccountLinks() {
   const importedByCompany = new Map(importedCompanyData.map((company) => [company.id, company]));
@@ -160,10 +163,13 @@ function isLocalEnvironment() {
 }
 
 function handleSessionExpired() {
+  sessionEpoch += 1;
   clearAuthSession();
   localStorage.removeItem(PLATFORM_STORAGE_KEY);
   state.session = null;
   state.role = "admin";
+  state.isSaving = false;
+  state.isRefreshing = false;
   state.updateDrafts = {};
   renderAuthShell();
   renderAll();
@@ -255,6 +261,7 @@ function canRefreshPlatformData(options = {}) {
 async function hydratePlatformDataFromApi(options = {}) {
   if (!apiAvailable() || !state.session?.token) return;
   if (!canRefreshPlatformData(options)) return;
+  const epoch = sessionEpoch;
   state.isRefreshing = true;
   try {
     const wasDetailOpen = $("#detailOverlay")?.classList.contains("open");
@@ -263,6 +270,8 @@ async function hydratePlatformDataFromApi(options = {}) {
       cache: "no-store",
       headers: authHeaders({ "cache-control": "no-cache" })
     });
+    // 通信中にログアウト/再ログインされたら、この応答は破棄する
+    if (epoch !== sessionEpoch || !state.session?.token) return;
     if (!authedResponse.ok) {
       if ([401, 403].includes(authedResponse.status)) {
         handleSessionExpired();
@@ -270,6 +279,7 @@ async function hydratePlatformDataFromApi(options = {}) {
       throw new Error(`API returned ${authedResponse.status}`);
     }
     const payload = await authedResponse.json();
+    if (epoch !== sessionEpoch || !state.session?.token) return;
     if (!Array.isArray(payload.companies)) return;
     companyData = payload.companies;
     state.platformUpdatedAt = payload.updatedAt || "";
@@ -305,11 +315,13 @@ async function hydratePlatformDataFromApi(options = {}) {
 async function checkPlatformSyncState(options = {}) {
   if (!apiAvailable() || !state.session?.token) return;
   if (!canRefreshPlatformData(options)) return;
+  const epoch = sessionEpoch;
   try {
     const response = await fetch("/api/sync-state", {
       cache: "no-store",
       headers: authHeaders({ "cache-control": "no-cache" })
     });
+    if (epoch !== sessionEpoch || !state.session?.token) return;
     if (!response.ok) {
       if ([401, 403].includes(response.status)) handleSessionExpired();
       return;
@@ -360,12 +372,15 @@ function renderSheetSyncStatus() {
 
 async function fetchSheetSyncStatus() {
   if (!apiAvailable() || !state.session?.token || !roleCanViewAll() || !roleCanEdit()) return;
+  const epoch = sessionEpoch;
   try {
     const response = await fetch("/api/admin/sync-bundled-data", {
       headers: authHeaders({ "cache-control": "no-cache" })
     });
+    if (epoch !== sessionEpoch || !state.session?.token) return;
     if (!response.ok) return;
     const payload = await response.json();
+    if (epoch !== sessionEpoch || !state.session?.token) return;
     state.sheetSyncStatus = payload.sync;
     renderSheetSyncStatus();
     if (payload.sync?.status === "completed" || payload.sync?.status === "skipped") {
@@ -904,6 +919,7 @@ function loginUser(role, companyId) {
     permissions: { canViewAll, canEdit },
     signedInAt: new Date().toISOString()
   };
+  sessionEpoch += 1;
   state.session = session;
   state.role = session.role;
   state.companyId = session.companyId;
@@ -935,6 +951,7 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
       if (!response.ok) return false;
       const payload = await response.json();
       if (!payload.session) return false;
+      sessionEpoch += 1;
       state.session = payload.session;
       state.role = payload.session.role;
       state.companyId = payload.session.companyId;
@@ -965,19 +982,28 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
 }
 
 function logoutUser() {
-  clearAuthSession();
-  localStorage.removeItem(PLATFORM_STORAGE_KEY);
+  // 世代を進めて、通信中の自動更新応答をすべて無効化する
+  sessionEpoch += 1;
   state.session = null;
   state.role = "admin";
+  // 進行中フラグをリセットし、ログイン画面の自動更新を即停止
+  state.isSaving = false;
+  state.isRefreshing = false;
+  state.lastFullRefreshAt = 0;
+  state.sheetSyncStatus = null;
+  state.updateDrafts = {};
+  clearAuthSession();
+  localStorage.removeItem(PLATFORM_STORAGE_KEY);
+  // まずログイン画面を即表示してから、裏側のデータをリセットする
+  closeMemberDetail();
+  renderAuthShell();
   companyData = cloneData(importedCompanyData);
   mergeImportedAccountLinks();
   state.companyId = companies()[0].id;
-  state.updateDrafts = {};
-  closeMemberDetail();
-  switchView("admin");
   renderCompanySelect();
   renderLoginCompanies();
-  renderAuthShell();
+  // 次回ログイン時に管理ビューから始まるよう内部状態だけリセット（通信はしない）
+  switchView("admin");
 }
 
 function renderShell() {

@@ -468,7 +468,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-10-launch-hardening", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-23-smooth-logout", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
