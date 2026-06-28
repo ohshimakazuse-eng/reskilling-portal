@@ -3,7 +3,8 @@ const fallbackCompanyData = [];
 const PLATFORM_STORAGE_KEY = "reskilling-platform-data-v2";
 const SESSION_STORAGE_KEY = "reskilling-session-v1";
 const MONTHLY_RESET_STORAGE_KEY = "reskilling-monthly-reset-v1";
-const AUTO_REFRESH_INTERVAL_MS = 5000;
+// sync-state（軽量な更新時刻チェック）のポーリング間隔。変更時のみ全件取得する。
+const AUTO_REFRESH_INTERVAL_MS = 20000;
 const FULL_REFRESH_INTERVAL_MS = 30000;
 const NON_CLIENT_COMPANY_IDS = new Set(["nh", "vv"]);
 const CLIENT_LOGIN_ALIASES = {
@@ -327,18 +328,15 @@ async function checkPlatformSyncState(options = {}) {
       return;
     }
     const payload = await response.json();
-    const checkedAt = Date.now();
-    const lastFullRefreshAt = state.lastFullRefreshAt || 0;
-    if (checkedAt - lastFullRefreshAt >= FULL_REFRESH_INTERVAL_MS) {
-      await hydratePlatformDataFromApi({ force: true, reason: options.reason || "scheduled-full-refresh" });
-      state.lastFullRefreshAt = checkedAt;
-      return;
-    }
+    if (epoch !== sessionEpoch || !state.session?.token) return;
+    // 変更があった時だけ全件取得する（タイマーでの無条件フル取得はSupabaseのegressを
+    // 大量消費しクォータ枯渇の原因になるため廃止）。sync-state自体は軽量クエリ。
     if (!payload.updatedAt) return;
     const localTime = state.platformUpdatedAt ? Date.parse(state.platformUpdatedAt) : 0;
     const remoteTime = Date.parse(payload.updatedAt);
     if (Number.isFinite(remoteTime) && remoteTime > localTime) {
       await hydratePlatformDataFromApi({ force: true, reason: options.reason || "remote-change" });
+      state.lastFullRefreshAt = Date.now();
     }
   } catch (error) {
     console.warn("Sync state check failed.", error);
@@ -530,6 +528,9 @@ function ensureMonthlyScheduleState() {
 function saveErrorMessage(error) {
   if ([401, 403].includes(error?.status)) {
     return "ログイン状態が切れています。もう一度ログインしてから保存してください。";
+  }
+  if (error?.detail?.code === "database_quota_restricted") {
+    return "本番DB（Supabase）が利用上限に達して一時停止されています。\n管理元でプランのアップグレードまたは利用制限の解除が必要です。復旧までしばらくお待ちください。";
   }
   if (error?.detail?.code === "database_unavailable") {
     return "DBが一時的に応答していません。30秒ほど待ってから、もう一度保存してください。";
@@ -940,7 +941,17 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
           password
         })
       });
-      if (!response.ok) return false;
+      if (!response.ok) {
+        // DB制限中はログイン自体がDB参照で失敗する。誤った「ID/パスワード違い」表示を避ける
+        let detail = null;
+        try { detail = await response.json(); } catch { detail = null; }
+        if (detail?.code === "database_quota_restricted" || detail?.code === "database_unavailable") {
+          const err = new Error(detail.message || "DBが利用できません");
+          err.code = detail.code;
+          throw err;
+        }
+        return false;
+      }
       const payload = await response.json();
       if (!payload.session) return false;
       sessionEpoch += 1;
@@ -2280,6 +2291,8 @@ async function applyUpdateDrafts() {
     showSaveStatus("保存に失敗しました", false);
     const message = [401, 403].includes(error?.status)
       ? "ログイン状態が切れています。もう一度ログインしてから「保存して反映」を押してください。"
+      : error?.detail?.code === "database_quota_restricted"
+        ? "本番DB（Supabase）が利用上限に達して一時停止されています。入力内容は画面に戻してあります。\n管理元でプランのアップグレードまたは利用制限の解除が必要です。"
       : error?.detail?.code === "database_unavailable"
         ? "DBが一時的に応答していません。入力内容は画面に戻してあります。30秒ほど待ってから、もう一度「保存して反映」を押してください。"
       : `保存に失敗しました。少し待ってからもう一度「保存して反映」を押してください。${error?.detail?.message ? `\n理由: ${error.detail.message}` : ""}`;
@@ -2864,7 +2877,11 @@ function bindEvents() {
       $("#loginError").textContent = "";
     } catch (error) {
       console.warn("Login submit failed.", error);
-      $("#loginError").textContent = "ログイン処理に失敗しました。通信状況を確認して、もう一度押してください。";
+      $("#loginError").textContent = error?.code === "database_quota_restricted"
+        ? "本番DB（Supabase）が利用上限に達して一時停止されています。管理元での復旧（プラン変更・制限解除）をお待ちください。"
+        : error?.code === "database_unavailable"
+          ? "DBが一時的に応答していません。少し待ってから、もう一度ログインしてください。"
+          : "ログイン処理に失敗しました。通信状況を確認して、もう一度押してください。";
     } finally {
       if (submitButton) {
         submitButton.disabled = false;
@@ -3136,17 +3153,19 @@ function bindEvents() {
 }
 
 function startAutoRefresh() {
+  // フォーカス/表示復帰では軽量な変更検知のみ行い、変更があった時だけ全件取得する
+  // （毎回フル取得するとalt-tab等でegressが急増しSupabaseのクォータを枯渇させるため）。
   window.addEventListener("focus", () => {
-    void hydratePlatformDataFromApi({ reason: "window-focus" });
+    void checkPlatformSyncState({ reason: "window-focus" });
   });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      void hydratePlatformDataFromApi({ reason: "visible" });
+      void checkPlatformSyncState({ reason: "visible" });
     }
   });
   window.addEventListener("storage", (event) => {
     if (event.key === PLATFORM_STORAGE_KEY && !hasUnsavedDrafts()) {
-      void hydratePlatformDataFromApi({ reason: "storage" });
+      void checkPlatformSyncState({ reason: "storage" });
     }
   });
   setInterval(() => {

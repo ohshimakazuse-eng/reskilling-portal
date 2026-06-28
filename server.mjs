@@ -112,6 +112,20 @@ function sendJson(response, statusCode, payload) {
 
 function apiErrorPayload(error) {
   const rawMessage = String(error?.publicMessage || error?.message || "Server error");
+  // Supabaseの利用上限（egress/容量超過などでプロジェクトが停止）。プラン側の対応が必要。
+  const isQuotaRestricted = error?.code === "database_quota_restricted"
+    || error?.statusCode === 402
+    || /egress_quota|exceed_egress|restricted due to|upgrade their plan|remove spend caps/i.test(rawMessage);
+  if (isQuotaRestricted) {
+    return {
+      statusCode: 503,
+      payload: {
+        ok: false,
+        code: "database_quota_restricted",
+        message: "本番DB（Supabase）が利用上限に達して一時停止されています。管理元でプランのアップグレードまたは利用制限の解除が必要です。復旧までしばらくお待ちください。"
+      }
+    };
+  }
   const isDbUnavailable = error?.statusCode === 503
     || /Supabase|Web server is down|Cloudflare|521|522|523|524/i.test(rawMessage);
   if (isDbUnavailable) {
@@ -470,7 +484,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-23-mtg-log-fix", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-23-egress-reduction", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 

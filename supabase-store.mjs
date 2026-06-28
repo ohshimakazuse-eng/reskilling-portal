@@ -49,8 +49,16 @@ function isRetryableStatus(status) {
   return status === 429 || status === 521 || status === 522 || status === 523 || status === 524 || status >= 500;
 }
 
+function isQuotaRestricted(status, text) {
+  const value = String(text || "");
+  return status === 402 || /egress_quota|exceed_egress|restricted due to|upgrade their plan|remove spend caps/i.test(value);
+}
+
 function compactDetail(text) {
   const value = String(text || "");
+  if (isQuotaRestricted(null, value)) {
+    return "本番DB（Supabase）が利用上限に達して一時停止されています。管理元でのプラン変更・制限解除が必要です。";
+  }
   if (value.includes("Web server is down") || value.includes("cloudflare") || value.includes("<!DOCTYPE html>")) {
     return "Supabase DBが一時的に応答していません。数十秒後にもう一度保存してください。";
   }
@@ -77,11 +85,19 @@ async function requestJson(config, path, options = {}, attempt = 0) {
   }
   if (!response.ok) {
     const detail = await response.text();
-    if (isRetryableStatus(response.status) && attempt + 1 < maxAttempts) {
+    // 利用上限による制限はリトライしても無駄でegressを増やすだけなので即座に失敗させる
+    if (isRetryableStatus(response.status) && !isQuotaRestricted(response.status, detail) && attempt + 1 < maxAttempts) {
       await wait(800 * (attempt + 1));
       return requestJson(config, path, options, attempt + 1);
     }
     const error = new Error(`${options.method || "GET"} ${path} failed: ${response.status} ${compactDetail(detail)}`);
+    if (isQuotaRestricted(response.status, detail)) {
+      // 翻訳後はキーワードが消えるため、明示コードで上位に伝える
+      error.code = "database_quota_restricted";
+      error.statusCode = 503;
+      error.publicMessage = "本番DB（Supabase）が利用上限に達して一時停止されています。管理元でのプラン変更・利用制限の解除が必要です。";
+      throw error;
+    }
     error.statusCode = isRetryableStatus(response.status) ? 503 : response.status;
     error.publicMessage = isRetryableStatus(response.status)
       ? "Supabase DBが一時的に応答していません。少し待ってから再度保存してください。"
