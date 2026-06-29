@@ -112,6 +112,20 @@ function sendJson(response, statusCode, payload) {
 
 function apiErrorPayload(error) {
   const rawMessage = String(error?.publicMessage || error?.message || "Server error");
+  // Supabaseの利用上限（egress/容量超過などでプロジェクトが停止）。プラン側の対応が必要。
+  const isQuotaRestricted = error?.code === "database_quota_restricted"
+    || error?.statusCode === 402
+    || /egress_quota|exceed_egress|restricted due to|upgrade their plan|remove spend caps/i.test(rawMessage);
+  if (isQuotaRestricted) {
+    return {
+      statusCode: 503,
+      payload: {
+        ok: false,
+        code: "database_quota_restricted",
+        message: "本番DB（Supabase）が利用上限に達して一時停止されています。管理元でプランのアップグレードまたは利用制限の解除が必要です。復旧までしばらくお待ちください。"
+      }
+    };
+  }
   const isDbUnavailable = error?.statusCode === 503
     || /Supabase|Web server is down|Cloudflare|521|522|523|524/i.test(rawMessage);
   if (isDbUnavailable) {
@@ -329,6 +343,8 @@ async function syncBundledDataToSupabaseIfNeeded(options = {}) {
     actor_id: null,
     company_id: null,
     target_type: "platform",
+    // target_id は uuid 型。非uuidを入れると同じ書き込みチャンクの監査ログが全件失敗するため、
+    // プラットフォーム単位の同期では一意なuuidを採番する（識別子は after_json.seedHash 側に保持）。
     target_id: crypto.randomUUID(),
     action: "bundled_data_sync",
     before_json: null,
@@ -468,7 +484,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (pathname === "/api/version" && request.method === "GET") {
-    sendJson(response, 200, { ok: true, version: "2026-06-10-launch-hardening", commit: process.env.RENDER_GIT_COMMIT || "" });
+    sendJson(response, 200, { ok: true, version: "2026-06-23-egress-reduction", commit: process.env.RENDER_GIT_COMMIT || "" });
     return true;
   }
 
