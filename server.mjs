@@ -583,6 +583,11 @@ async function handleApi(request, response, pathname) {
       sendJson(response, 403, { ok: false, message: "company scope violation" });
       return true;
     }
+    const requestsDeletion = body.companies.some((company) => company && company.deleted === true);
+    if (requestsDeletion && !session.permissions.canViewAll) {
+      sendJson(response, 403, { ok: false, message: "company deletion requires admin permission" });
+      return true;
+    }
     let saveResult;
     let updatedAt;
     const writeTask = companyWriteQueue.then(async () => {

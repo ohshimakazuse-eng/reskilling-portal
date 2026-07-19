@@ -2010,6 +2010,7 @@ function progressLabel(value) {
 function renderCompanyGrid() {
   const list = [...companies()].sort((a, b) => currentEnrollment(b) - currentEnrollment(a));
   const maxSales = Math.max(...list.map((company) => Number(company.sales || 0)), 1);
+  const canManage = roleCanManageCompanies();
   $("#companyGrid").innerHTML = list.map((company) => {
     const [tone, label] = statusTone(company);
     const enrollment = currentEnrollment(company);
@@ -2017,7 +2018,10 @@ function renderCompanyGrid() {
     const risk = riskCount(company);
     const riskRate = Math.round((risk / Math.max(1, company.members.length)) * 100);
     const sales = Number(company.sales || 0);
+    const canDelete = canManage && !NON_CLIENT_COMPANY_IDS.has(company.id);
     return `
+      <div class="company-card-wrap">
+      ${canDelete ? `<button class="company-delete-button" data-delete-company="${company.id}" type="button" title="このマイページを削除" aria-label="${company.name} のマイページを削除">×</button>` : ""}
       <button class="company-card" data-company="${company.id}" type="button">
         <div class="company-card-head">
           <div>
@@ -2044,6 +2048,7 @@ function renderCompanyGrid() {
         </div>
         <p class="subtext">要確認率 ${riskRate}% / クリックで会社ページへ</p>
       </button>
+      </div>
     `;
   }).join("");
 
@@ -2053,6 +2058,14 @@ function renderCompanyGrid() {
       $("#companySelect").value = state.companyId;
       switchView("dashboard");
       renderAll();
+    });
+  });
+
+  $$("[data-delete-company]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      void deleteCompany(button.dataset.deleteCompany);
     });
   });
 }
@@ -2328,6 +2341,47 @@ function addCompanyFromForm() {
   renderLoginCompanies();
   $("#companySelect").value = state.companyId;
   switchView("dashboard");
+}
+
+async function deleteCompany(companyId) {
+  if (!roleCanManageCompanies()) return;
+  const company = companyData.find((item) => item.id === companyId);
+  if (!company) return;
+  if (NON_CLIENT_COMPANY_IDS.has(company.id)) {
+    window.alert("社内管理用の会社のため削除できません。");
+    return;
+  }
+  if (!window.confirm(`${company.name} のマイページを削除します。\nログインID「${company.id}」でのアクセスもできなくなり、元に戻せません。よろしいですか？`)) return;
+  company.deleted = true;
+  state.companyId = company.id;
+  try {
+    await savePlatformData(`${company.name}: 法人（マイページ）を削除`, { scope: "company" });
+  } catch (error) {
+    delete company.deleted;
+    if ([401, 403].includes(error?.status)) handleSessionExpired();
+    showSaveStatus("削除に失敗しました", false);
+    window.alert(saveErrorMessage(error));
+    await hydratePlatformDataFromApi({ force: true, reason: "delete-failed" });
+    renderAll();
+    return;
+  }
+  companyData = companyData.filter((item) => item.id !== companyId);
+  if (!companyData.some((item) => item.id === state.companyId)) {
+    state.companyId = companyData[0]?.id || "";
+  }
+  localStorage.setItem(PLATFORM_STORAGE_KEY, JSON.stringify({
+    savedAt: new Date().toISOString(),
+    sourceSignature: importedDataSignature,
+    companies: companyData
+  }));
+  addOperation("法人削除", `${company.name} を削除`, `ログインID ${company.id} / マイページを無効化`);
+  showSaveStatus("マイページを削除しました。全端末に反映されます。", true);
+  const companySelect = $("#companySelect");
+  if (companySelect) companySelect.value = state.companyId;
+  renderCompanySelect();
+  renderLoginCompanies();
+  renderAll();
+  if (apiAvailable()) setTimeout(renderAuditLogs, 450);
 }
 
 function deleteMember(memberName) {
