@@ -499,6 +499,37 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
     const beforeCounts = existingCompany ? companyTableCounts(tables, existingCompany.id) : null;
     const company = findOrCreateCompany(tables, legacyCompany);
     const reportMonth = company.report_month;
+
+    if (legacyCompany.deleted) {
+      company.deleted_at = company.deleted_at || now;
+      company.contract_status = "archived";
+      company.updated_at = now;
+      tables.members.forEach((member) => {
+        if (member.company_id === company.id && !member.deleted_at) {
+          member.active = false;
+          member.deleted_at = now;
+        }
+      });
+      tables.coaching_sessions.forEach((session) => {
+        if (session.company_id === company.id && !session.deleted_at) {
+          session.deleted_at = now;
+        }
+      });
+      tables.audit_logs.unshift({
+        id: crypto.randomUUID(),
+        batch_id: batchId,
+        actor_id: null,
+        company_id: company.id,
+        target_type: "company",
+        target_id: company.id,
+        action: "delete",
+        before_json: beforeCounts,
+        after_json: { source: "frontend", actor, summary, deleted: true },
+        created_at: now
+      });
+      return;
+    }
+
     company.name = legacyCompany.name;
     company.source_file = legacyCompany.sourceFile || company.source_file;
     company.updated_at = now;
