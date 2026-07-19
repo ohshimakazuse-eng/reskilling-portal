@@ -502,7 +502,7 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
 
     if (legacyCompany.deleted) {
       company.deleted_at = company.deleted_at || now;
-      company.contract_status = "archived";
+      company.contract_status = "ended";
       company.updated_at = now;
       tables.members.forEach((member) => {
         if (member.company_id === company.id && !member.deleted_at) {
