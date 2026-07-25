@@ -350,6 +350,8 @@ function renderSheetSyncStatus() {
   if (!panel || !statusEl || !button) return;
   const visible = roleCanViewAll() && roleCanEdit();
   panel.style.display = visible ? "" : "none";
+  const migrationPanel = $("#metricMigrationPanel");
+  if (migrationPanel) migrationPanel.style.display = visible ? "" : "none";
   if (!visible) return;
   const sync = state.sheetSyncStatus;
   const label = {
@@ -409,6 +411,41 @@ async function startSheetSync() {
     setTimeout(poll, 1800);
   } catch (error) {
     window.alert(`同期を開始できませんでした。\n${error.message}`);
+  }
+}
+
+async function migrateMetricMonths() {
+  if (!roleCanManageCompanies()) return;
+  const button = $("#migrateMetricMonths");
+  const status = $("#metricMigrationStatus");
+  const ok = window.confirm(
+    "いま入っている受講生の数字を「当月の実績」として記録し直します。\n\n"
+    + "・先月以前は未登録に戻ります（旧仕様では月別に記録されていないため、過去月の数字は復元できません）\n"
+    + "・当月の数字をすでに入力済みの受講生は、その値がそのまま残ります\n"
+    + "・元の値は更新ログに退避されます\n\n実行しますか？"
+  );
+  if (!ok) return;
+  const originalText = button?.textContent;
+  try {
+    if (button) { button.disabled = true; button.textContent = "実行中..."; }
+    const response = await fetch("/api/admin/migrate-metric-months", {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "付け替えに失敗しました。");
+    if (status) {
+      status.textContent = `完了: ${payload.moved}件を${payload.targetMonth}の実績へ付け替え、${payload.removed}件の旧データを整理しました`
+        + `${payload.keptExisting ? `（入力済みの${payload.keptExisting}件はそのまま維持）` : ""}。`;
+    }
+    await hydratePlatformDataFromApi({ force: true, reason: "metric-migration" });
+    renderAll();
+    window.alert(`当月(${payload.targetMonth})の実績として付け替えました。\n対象 ${payload.moved}件`);
+  } catch (error) {
+    if ([401, 403].includes(error?.status)) handleSessionExpired();
+    window.alert(`付け替えに失敗しました。\n${error.message}`);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = originalText || "当月に付け替える"; }
   }
 }
 
@@ -2999,6 +3036,7 @@ function bindEvents() {
 
   $("#logoutButton").addEventListener("click", logoutUser);
   $("#syncBundledData").addEventListener("click", startSheetSync);
+  $("#migrateMetricMonths")?.addEventListener("click", () => void migrateMetricMonths());
 
   $("#monthlyResetButton").addEventListener("click", () => {
     if (!roleCanEdit()) return;
