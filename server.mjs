@@ -335,7 +335,8 @@ async function syncBundledDataToSupabaseIfNeeded(options = {}) {
     normalizedDb,
     data.companies || [],
     options.actor || "system",
-    `最新スプシ正本のデプロイ同期 ${data.generatedAt || hash.slice(0, 12)}`
+    `最新スプシ正本のデプロイ同期 ${data.generatedAt || hash.slice(0, 12)}`,
+    { months: data.months || defaultMonths }
   );
   normalizedDb.tables.audit_logs.unshift({
     id: crypto.randomUUID(),
@@ -641,7 +642,7 @@ async function handleApi(request, response, pathname) {
       const companiesToNormalize = saveScope === "company"
         ? [incomingById.get(scopedCompanyId)]
         : mergedCompanies;
-      applyLegacyCompaniesToNormalized(normalizedDb, companiesToNormalize, session.name, body.summary || "frontend save");
+      applyLegacyCompaniesToNormalized(normalizedDb, companiesToNormalize, session.name, body.summary || "frontend save", { months: db.months || defaultMonths });
       saveResult = await writeStoreDb(normalizedDb, {
         scope: saveScope,
         companyCodes: saveScope === "company" ? [scopedCompanyId] : []

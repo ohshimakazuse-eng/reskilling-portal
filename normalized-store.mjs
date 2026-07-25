@@ -70,6 +70,8 @@ const normalizedTableNames = [
   "audit_logs"
 ];
 
+const defaultMetricMonths = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+
 function toLegacyDate(value) {
   return String(value || "").replaceAll("-", "/");
 }
@@ -193,10 +195,60 @@ function upsertMemberMetric(tables, memberId, metricMonth, salesAmount, follower
     };
     tables.member_metrics.push(metric);
   }
-  metric.follower_count = Number(followerCount || 0);
-  metric.sales_amount = Number(salesAmount || 0);
+  // null/undefined は「その月は未登録」を意味し、既存値を上書きしない
+  if (followerCount !== null && followerCount !== undefined) metric.follower_count = Number(followerCount || 0);
+  if (salesAmount !== null && salesAmount !== undefined) metric.sales_amount = Number(salesAmount || 0);
   metric.updated_at = new Date().toISOString();
   metric.source_kind = "manual";
+}
+
+// "6月" のような月ラベルから月番号を取り出す（取れない場合は並び順で代用）
+function monthNumberFromLabel(label, fallbackIndex = 0) {
+  const match = String(label ?? "").match(/(\d{1,2})/);
+  const value = match ? Number(match[1]) : NaN;
+  return value >= 1 && value <= 12 ? value : fallbackIndex + 1;
+}
+
+function metricMonthKey(year, monthNumber) {
+  return `${year}-${String(monthNumber).padStart(2, "0")}-01`;
+}
+
+// 当月の位置。当月ラベルが無い月構成でも末尾ではなく直近の過去月へ寄せる
+function currentMonthIndexFor(months, date = new Date()) {
+  const target = date.getMonth() + 1;
+  let fallback = -1;
+  for (let index = 0; index < months.length; index += 1) {
+    const number = monthNumberFromLabel(months[index], index);
+    if (number === target) return index;
+    if (number < target) fallback = index;
+  }
+  return fallback >= 0 ? fallback : 0;
+}
+
+function historyValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+// 月ごとの実績を1行ずつ保存し、過去月の数字を残して比較できるようにする
+function upsertMemberMetricHistory(tables, memberId, months, year, legacyMember) {
+  const sales = Array.isArray(legacyMember.salesHistory) ? legacyMember.salesHistory : null;
+  const followers = Array.isArray(legacyMember.followerHistory) ? legacyMember.followerHistory : null;
+  if (!sales && !followers) return false;
+  let wrote = false;
+  let carriedFollower = null;
+  months.forEach((label, index) => {
+    const followerValue = followers ? historyValue(followers[index]) : null;
+    const salesValue = sales ? historyValue(sales[index]) : null;
+    if (followerValue !== null) carriedFollower = followerValue;
+    if (followerValue === null && salesValue === null) return;
+    const monthKey = metricMonthKey(year, monthNumberFromLabel(label, index));
+    // フォロワーは累計値のため、その月の登録がなければ直近値を引き継ぐ
+    upsertMemberMetric(tables, memberId, monthKey, salesValue, followerValue !== null ? followerValue : carriedFollower);
+    wrote = true;
+  });
+  return wrote;
 }
 
 function replaceMemberAccounts(tables, memberId, links, stage) {
@@ -367,6 +419,7 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
   const milestonesByMember = groupBy(tables.member_milestones, "member_id");
   const sessionsByMember = groupBy(tables.coaching_sessions, "member_id");
   const latestMetricByMember = latestBy(tables.member_metrics, "member_id", "metric_month");
+  const metricsByMember = groupBy(tables.member_metrics, "member_id");
   const latestSummaryByCompany = latestBy(tables.company_monthly_summaries, "company_id", "summary_month");
   const latestReportByCompany = latestBy(tables.client_reports || [], "company_id", "report_month");
 
@@ -380,6 +433,19 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
         .filter((member) => !member.deleted_at)
         .map((member) => {
           const metric = latestMetricByMember.get(member.id);
+          // 月次実績を「月ラベル → 実績行」に対応付け、実際の月の位置へ復元する
+          const memberMetrics = metricsByMember.get(member.id) || [];
+          const metricYear = memberMetrics.reduce((max, row) => {
+            const year = Number(String(row.metric_month || "").slice(0, 4));
+            return Number.isFinite(year) ? Math.max(max, year) : max;
+          }, 0);
+          const metricByMonthNumber = new Map();
+          memberMetrics.forEach((row) => {
+            const [year, month] = String(row.metric_month || "").split("-").map(Number);
+            if (year !== metricYear) return;
+            metricByMonthNumber.set(month, row);
+          });
+          const metricForIndex = (label, index) => metricByMonthNumber.get(monthNumberFromLabel(label, index)) || null;
           const milestoneValues = {};
           (milestonesByMember.get(member.id) || []).forEach((milestone) => {
             const legacyKey = reverseMilestoneMap[milestone.milestone_key];
@@ -412,8 +478,14 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
             stage: stageToLegacy[member.stage] || "構築",
             progress: member.progress_percent,
             sales: metric?.sales_amount || 0,
-            followerHistory: months.map((_, index) => index === months.length - 1 ? metric?.follower_count || 0 : 0),
-            salesHistory: months.map((_, index) => index === months.length - 1 ? metric?.sales_amount || 0 : 0),
+            followerHistory: months.map((label, index) => {
+              const row = metricForIndex(label, index);
+              return row ? Number(row.follower_count || 0) : null;
+            }),
+            salesHistory: months.map((label, index) => {
+              const row = metricForIndex(label, index);
+              return row ? Number(row.sales_amount || 0) : null;
+            }),
             accountLinks,
             clientMemo: member.client_memo || undefined,
             meetings,
@@ -422,8 +494,9 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
         });
 
       const currentEnrollment = summary?.enrollment_count ?? members.length;
+      const enrollmentIndex = currentMonthIndexFor(months);
       const enrollment = Array.isArray(legacyCompany?.enrollment) && legacyCompany.enrollment.length === months.length
-        ? [...legacyCompany.enrollment.slice(0, -1), currentEnrollment]
+        ? legacyCompany.enrollment.map((value, index) => index === enrollmentIndex ? currentEnrollment : value)
         : months.map(() => currentEnrollment);
 
       return {
@@ -481,10 +554,12 @@ export function normalizedMemberDetail(normalizedDb, memberId) {
   };
 }
 
-export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, actor = "prototype", summary = "frontend save") {
+export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, actor = "prototype", summary = "frontend save", options = {}) {
   const tables = normalizedDb.tables;
   const batchId = crypto.randomUUID();
   const now = new Date().toISOString();
+  const metricMonths = Array.isArray(options.months) && options.months.length ? options.months : defaultMetricMonths;
+  const metricYear = new Date().getFullYear();
   tables.update_batches.unshift({
     id: batchId,
     company_id: null,
@@ -556,7 +631,10 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
 
       replaceMemberAccounts(tables, member.id, legacyMember.accountLinks, legacyMember.stage);
       upsertMemberMilestones(tables, member.id, legacyMember);
-      upsertMemberMetric(tables, member.id, reportMonth, latestSales, latestFollowers);
+      // 月次履歴があれば月ごとに保存し、無い旧形式のみ従来どおり対象月へ1件保存する
+      if (!upsertMemberMetricHistory(tables, member.id, metricMonths, metricYear, legacyMember)) {
+        upsertMemberMetric(tables, member.id, reportMonth, latestSales, latestFollowers);
+      }
       replaceMemberSessions(tables, company.id, member.id, legacyMember.meetings);
     });
 

@@ -448,11 +448,40 @@ function currentMonthKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// "6月" のような月ラベルから月番号を取り出す（取れない場合は並び順で代用）
+function monthNumberFromLabel(label, fallbackIndex = 0) {
+  const match = String(label ?? "").match(/(\d{1,2})/);
+  const value = match ? Number(match[1]) : NaN;
+  return value >= 1 && value <= 12 ? value : fallbackIndex + 1;
+}
+
+// 実際の当月が推移グラフの何番目にあたるか
+// 当月のラベルが無い月構成でも、末尾ではなく「当月以前で最も新しい月」に寄せる
+function currentMonthIndex(date = new Date()) {
+  const target = date.getMonth() + 1;
+  let fallback = -1;
+  for (let i = 0; i < months.length; i += 1) {
+    const number = monthNumberFromLabel(months[i], i);
+    if (number === target) return i;
+    if (number < target) fallback = i;
+  }
+  return fallback >= 0 ? fallback : 0;
+}
+
+// 指定月以前で「実際に登録された」直近の月を返す（未登録は -1）
+function recordedIndexAtOrBefore(values, index) {
+  const list = Array.isArray(values) ? values : [];
+  for (let i = Math.min(index, list.length - 1); i >= 0; i -= 1) {
+    if (Number.isFinite(Number(list[i])) && list[i] !== null && list[i] !== "") return i;
+  }
+  return -1;
+}
+
 function monthlyResetKeys() {
   return ["f1000"];
 }
 
-function ensureHistoryLength(values, fallback = 0) {
+function ensureHistoryLength(values, fallback = null) {
   const list = Array.isArray(values) ? [...values] : [];
   while (list.length < months.length) list.unshift(fallback);
   return list.slice(-months.length);
@@ -461,8 +490,10 @@ function ensureHistoryLength(values, fallback = 0) {
 function resetMemberForMonth(member, monthKey) {
   const now = new Date().toISOString();
   const detail = memberDetail(member);
-  member.salesHistory = ensureHistoryLength(detail.sales, 0);
-  member.salesHistory[member.salesHistory.length - 1] = 0;
+  member.followerHistory = ensureHistoryLength(detail.followers, null);
+  member.salesHistory = ensureHistoryLength(detail.sales, null);
+  // 当月の売上だけ0開始にし、前月までの実績はそのまま残す
+  member.salesHistory[currentMonthIndex()] = 0;
   member.sales = 0;
   monthlyResetKeys().forEach((key) => {
     member[key] = false;
@@ -710,7 +741,9 @@ function selectedCompany() {
 }
 
 function currentEnrollment(company) {
-  return company.enrollment[company.enrollment.length - 1] || 0;
+  const list = Array.isArray(company?.enrollment) ? company.enrollment : [];
+  const index = recordedIndexAtOrBefore(list, currentMonthIndex());
+  return index >= 0 ? Number(list[index]) || 0 : 0;
 }
 
 function filteredMembers() {
@@ -754,44 +787,60 @@ function memberSeed(member) {
   return [...member.name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
+// 未登録（null/空欄）と 0 を区別して数値化する
+function historyValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function memberDetail(member) {
   if (!member) {
     return {
       followers: months.map(() => null),
-      sales: months.map(() => 0),
+      sales: months.map(() => null),
       latestFollower: null,
       latestSales: 0,
+      previousFollower: null,
+      previousSales: null,
       hasFollowerData: false,
       hasSalesData: false,
       meetings: []
     };
   }
+  const monthIndex = currentMonthIndex();
   const seed = memberSeed(member);
   const startFollowers = member.stage === "PR" ? 120 + (seed % 90) : 12 + (seed % 28);
   const monthlyGain = Math.max(4, Math.round(member.progress * (member.stage === "PR" ? 3.4 : 1.7)));
-  const generatedFollowers = months.map((_, index) => startFollowers + Math.round(monthlyGain * index * (0.72 + (index % 3) * 0.16)));
+  const generatedFollowers = months.map((_, index) => index <= monthIndex ? startFollowers + Math.round(monthlyGain * index * (0.72 + (index % 3) * 0.16)) : null);
   const sourceSales = Number(member.sales || 0);
-  const generatedSales = months.map((_, index) => index === months.length - 1 ? sourceSales : 0);
+  const generatedSales = months.map((_, index) => index === monthIndex ? sourceSales : null);
   const explicitFollowers = Array.isArray(member.followerHistory) && member.followerHistory.length === months.length;
   const explicitSales = Array.isArray(member.salesHistory) && member.salesHistory.length === months.length;
   const hasLegacyFollower = Number.isFinite(Number(member.followers));
-  const hasLegacySales = Number.isFinite(Number(member.sales));
   const followers = explicitFollowers
-    ? member.followerHistory.map((value) => Number.isFinite(Number(value)) ? Number(value) : null)
+    ? member.followerHistory.map(historyValue)
     : hasLegacyFollower
       ? generatedFollowers
       : months.map(() => null);
   const sales = explicitSales
-    ? member.salesHistory.map((value) => Number.isFinite(Number(value)) ? Number(value) : 0)
+    ? member.salesHistory.map(historyValue)
     : generatedSales;
-  const latestFollower = [...followers].reverse().find((value) => value !== null) ?? null;
-  const latestSales = Number(sales[sales.length - 1] || 0);
+
+  // 当月に登録がなければ、直近で登録された月まで遡って「最新値」とする
+  const followerIndex = recordedIndexAtOrBefore(followers, monthIndex);
+  const salesIndex = recordedIndexAtOrBefore(sales, monthIndex);
+  const prevFollowerIndex = followerIndex > 0 ? recordedIndexAtOrBefore(followers, followerIndex - 1) : -1;
+  const prevSalesIndex = salesIndex > 0 ? recordedIndexAtOrBefore(sales, salesIndex - 1) : -1;
+
   return {
     followers,
     sales,
-    latestFollower,
-    latestSales,
-    hasFollowerData: followers.some((value) => value !== null),
+    latestFollower: followerIndex >= 0 ? followers[followerIndex] : null,
+    latestSales: salesIndex >= 0 ? Number(sales[salesIndex] || 0) : 0,
+    previousFollower: prevFollowerIndex >= 0 ? followers[prevFollowerIndex] : null,
+    previousSales: prevSalesIndex >= 0 ? Number(sales[prevSalesIndex] || 0) : null,
+    hasFollowerData: followerIndex >= 0,
     hasSalesData: sales.some((value) => Number(value || 0) > 0),
     meetings: member.meetings || []
   };
@@ -852,7 +901,7 @@ function createBlankCompany({ name, code, enrollment = 0 }) {
     buildCount: 0,
     prCount: 0,
     sales: 0,
-    enrollment: months.map((_, index) => index === months.length - 1 ? count : 0),
+    enrollment: months.map((_, index) => index === currentMonthIndex() ? count : 0),
     progressReport: defaultProgressReportForNewCompany(name),
     members: []
   };
@@ -866,8 +915,8 @@ function createBlankMember({ name, stage = "構築", status = "F", progress = 0 
     progress: Number(progress || 0),
     ...milestoneDefaults(Number(progress || 0), stage),
     sales: 0,
-    followerHistory: months.map(() => 0),
-    salesHistory: months.map(() => 0),
+    followerHistory: months.map(() => null),
+    salesHistory: months.map(() => null),
     accountLinks: [],
     clientMemo: `${name} は新規追加されました。更新タブで進捗・アカウント・MTG情報を登録してください。`,
     meetings: [],
@@ -1069,7 +1118,7 @@ function switchView(viewId) {
 }
 
 function memberSalesValue(member) {
-  return Number(member.salesHistory?.at?.(-1) ?? member.sales ?? memberDetail(member).latestSales ?? 0);
+  return Number(memberDetail(member).latestSales || 0);
 }
 
 function salesLeadersForCompany(company, limit = 5) {
@@ -2208,7 +2257,7 @@ function milestoneDefaults(progress, stage) {
 function recalcCompanyStats(company) {
   company.members = Array.isArray(company.members) ? company.members : [];
   company.enrollment = Array.isArray(company.enrollment) && company.enrollment.length ? company.enrollment : months.map(() => 0);
-  company.enrollment[company.enrollment.length - 1] = company.members.length;
+  company.enrollment[currentMonthIndex()] = company.members.length;
   company.prCount = company.members.filter((item) => item.stage === "PR").length;
   company.buildCount = company.members.filter((item) => item.stage === "構築").length;
   company.sales = company.members.reduce((sum, member) => sum + memberDetail(member).latestSales, 0);
@@ -2216,17 +2265,18 @@ function recalcCompanyStats(company) {
 
 function updateSheetMember(member, field, rawValue, checked) {
   const detail = memberDetail(member);
+  const monthIndex = currentMonthIndex();
   if (field === "followers") {
     member.followerHistory = [...detail.followers];
     const nextValue = rawValue === "" || rawValue === null || rawValue === undefined ? null : Number(rawValue);
-    member.followerHistory[member.followerHistory.length - 1] = Number.isFinite(nextValue) ? nextValue : null;
-    addDetailUpdate("数字更新", `${member.name} のフォロワーを更新`, `フォロワー ${formatFollowerValue(member.followerHistory.at(-1))}`, member);
+    member.followerHistory[monthIndex] = Number.isFinite(nextValue) ? nextValue : null;
+    addDetailUpdate("数字更新", `${member.name} のフォロワーを更新`, `${months[monthIndex]} フォロワー ${formatFollowerValue(member.followerHistory[monthIndex])}`, member);
     return;
   }
   if (field === "sales") {
     member.salesHistory = [...detail.sales];
-    member.salesHistory[member.salesHistory.length - 1] = Number(rawValue);
-    addDetailUpdate("数字更新", `${member.name} の売上を更新`, `売上 ${money(Number(rawValue))}`, member);
+    member.salesHistory[monthIndex] = Number(rawValue);
+    addDetailUpdate("数字更新", `${member.name} の売上を更新`, `${months[monthIndex]} 売上 ${money(Number(rawValue))}`, member);
     return;
   }
   if (field === "stage") {
@@ -2479,7 +2529,7 @@ function openMemberDetail(member) {
     {
       label: "フォロワー",
       value: formatFollowerValue(detail.latestFollower),
-      caption: detail.hasFollowerData ? `前月比 ${metricDeltaText(detail.followers.at(-1), detail.followers.at(-2), "人")}` : "未登録",
+      caption: detail.hasFollowerData ? `前回比 ${metricDeltaText(detail.latestFollower, detail.previousFollower, "人")}` : "未登録",
       tone: detail.hasFollowerData ? "good" : "warn"
     },
     {
@@ -2609,9 +2659,9 @@ function generateMemberAutoConclusion(member) {
   const missingItems = all.filter((item) => !milestoneDone(member, item.key));
   const done = all.length - missingItems.length;
   const latestFollower = detail.latestFollower;
-  const prevFollower = detail.followers.length > 1 ? detail.followers.at(-2) : null;
+  const prevFollower = detail.previousFollower;
   const latestSales = detail.latestSales;
-  const prevSales = detail.sales.length > 1 ? Number(detail.sales.at(-2) || 0) : 0;
+  const prevSales = Number(detail.previousSales || 0);
   const followerDelta = metricDeltaText(latestFollower, prevFollower, "人");
   const salesDelta = money(latestSales - prevSales);
   const tone = detailTone(member);
@@ -2664,8 +2714,8 @@ function renderDetailActionBoard(member, detail) {
   const missingItems = all.filter((item) => !milestoneDone(member, item.key));
   const done = all.length - missingItems.length;
   const nextItems = missingItems.slice(0, 4);
-  const followerDelta = metricDeltaText(detail.followers.at(-1), detail.followers.at(-2), "人");
-  const salesDelta = detail.sales.at(-1) - detail.sales.at(-2);
+  const followerDelta = metricDeltaText(detail.latestFollower, detail.previousFollower, "人");
+  const salesDelta = Number(detail.latestSales || 0) - Number(detail.previousSales || 0);
   const tone = detailTone(member);
   const conclusion = activeAutoConclusion(member);
 
@@ -2849,7 +2899,10 @@ function renderDetailUpdateFeed(memberName) {
 }
 
 function renderMiniChart(selector, values, type, verdictSelector) {
-  const normalized = Array.isArray(values) && values.length ? values : months.map(() => type === "sales" ? 0 : null);
+  const source = Array.isArray(values) && values.length ? values : months.map(() => null);
+  // 未到来の月まで並べても比較にならないため、当月までを表示する
+  const visibleCount = Math.min(currentMonthIndex() + 1, source.length);
+  const normalized = source.slice(0, visibleCount);
   const numeric = normalized.filter((value) => Number.isFinite(value));
   const max = Math.max(...numeric, 1);
   const verdict = trendVerdict(normalized, type === "sales" ? 0 : 3);
@@ -3144,12 +3197,13 @@ function bindEvents() {
     const member = activeMember();
     if (!member) return;
     const detail = memberDetail(member);
+    const monthIndex = currentMonthIndex();
     member.followerHistory = [...detail.followers];
     member.salesHistory = [...detail.sales];
     const followerInput = $("#detailFollowers").value;
-    member.followerHistory[member.followerHistory.length - 1] = followerInput === "" ? null : Number(followerInput);
-    member.salesHistory[member.salesHistory.length - 1] = Number($("#detailSales").value);
-    addDetailUpdate("数字更新", `${member.name} の数字を更新`, `フォロワー ${formatFollowerValue(member.followerHistory.at(-1))} / 売上 ${money(Number($("#detailSales").value))}`);
+    member.followerHistory[monthIndex] = followerInput === "" ? null : Number(followerInput);
+    member.salesHistory[monthIndex] = Number($("#detailSales").value);
+    addDetailUpdate("数字更新", `${member.name} の数字を更新`, `${months[monthIndex]} フォロワー ${formatFollowerValue(member.followerHistory[monthIndex])} / 売上 ${money(Number($("#detailSales").value))}`);
     void persistAndRefresh(member);
   });
 
