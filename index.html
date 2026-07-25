@@ -129,6 +129,15 @@
             <button class="primary-button small" id="syncBundledData" type="button">同期を開始</button>
           </section>
 
+          <section class="sync-toolbar" id="metricMigrationPanel">
+            <div>
+              <p class="eyebrow">実績データの修復</p>
+              <h2>いま入っている数字を当月の実績にする</h2>
+              <p class="subtext" id="metricMigrationStatus">旧仕様では月に関係なく1件の実績を上書きしていました。実行すると現在の数字が当月の実績として記録され、先月以前は未登録に戻ります。一度だけ実行してください。</p>
+            </div>
+            <button class="ghost-button small" id="migrateMetricMonths" type="button">当月に付け替える</button>
+          </section>
+
           <section class="exec-focus command-top admin-command-top">
             <article class="focus-card number-board">
               <p class="eyebrow">全社サマリー</p>

@@ -554,6 +554,60 @@ export function normalizedMemberDetail(normalizedDb, memberId) {
   };
 }
 
+// 修正前は会社の report_month に1行だけ持ち上書きし続けていたため、いま入っている数字は
+// 「その月の実績」ではなく最新値。これを当月の実績として付け替え、当月より前を未登録に戻す。
+// 対象月にすでに行がある場合（修正版で入力済みの本物の実績）は上書きしない。
+export function planMetricMonthMigration(metricRows, targetMonth) {
+  const stale = (metricRows || []).filter((row) => String(row.metric_month) < targetMonth);
+  const existingTargets = new Set(
+    (metricRows || []).filter((row) => String(row.metric_month) === targetMonth).map((row) => row.member_id)
+  );
+  const latestByMember = new Map();
+  stale.forEach((row) => {
+    const current = latestByMember.get(row.member_id);
+    const isNewer = !current
+      || String(row.metric_month) > String(current.metric_month)
+      || (String(row.metric_month) === String(current.metric_month) && String(row.updated_at || "") > String(current.updated_at || ""));
+    if (isNewer) latestByMember.set(row.member_id, row);
+  });
+  const inserts = [];
+  latestByMember.forEach((row, memberId) => {
+    if (existingTargets.has(memberId)) return;
+    inserts.push({
+      member_id: memberId,
+      metric_month: targetMonth,
+      follower_count: Number(row.follower_count || 0),
+      sales_amount: Number(row.sales_amount || 0),
+      deals_count: Number(row.deals_count || 0),
+      source_kind: row.source_kind || "manual",
+      source_ref: { ...(row.source_ref || {}), migrated_from: row.metric_month, migrated_to: targetMonth },
+      updated_by: row.updated_by ?? null,
+      updated_at: new Date().toISOString()
+    });
+  });
+  return {
+    inserts,
+    removed: stale.length,
+    keptExisting: existingTargets.size,
+    snapshot: stale.map((row) => ({
+      member_id: row.member_id,
+      metric_month: row.metric_month,
+      follower_count: row.follower_count,
+      sales_amount: row.sales_amount,
+      deals_count: row.deals_count,
+      updated_at: row.updated_at
+    }))
+  };
+}
+
+export function applyMetricMonthMigration(normalizedDb, targetMonth) {
+  const tables = normalizedDb.tables;
+  const plan = planMetricMonthMigration(tables.member_metrics || [], targetMonth);
+  tables.member_metrics = (tables.member_metrics || []).filter((row) => String(row.metric_month) >= targetMonth);
+  tables.member_metrics.push(...plan.inserts);
+  return plan;
+}
+
 export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, actor = "prototype", summary = "frontend save", options = {}) {
   const tables = normalizedDb.tables;
   const batchId = crypto.randomUUID();

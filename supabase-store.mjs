@@ -282,6 +282,28 @@ export async function readSupabaseSyncState(options = {}) {
   return { updatedAt, companyCount: rows.length };
 }
 
+// 実績の月移行のような一点修正用。全件読み込みを避けて必要な行だけ扱う。
+export async function fetchSupabaseRows(table, query = "select=*") {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  return fetchAll(config, table, query);
+}
+
+export async function upsertSupabaseRows(table, conflict, rows) {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  return upsertRows(config, table, conflict, rows);
+}
+
+export async function deleteSupabaseMemberMetricsBefore(month) {
+  const config = supabaseConfig();
+  if (!config) throw new Error("Supabase is not configured.");
+  await requestJson(config, `member_metrics?metric_month=lt.${encodeURIComponent(month)}`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
+}
+
 export async function writeSupabaseNormalizedDb(db, writeOptions = {}) {
   const config = supabaseConfig();
   if (!config) throw new Error("Supabase is not configured.");

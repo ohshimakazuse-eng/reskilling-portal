@@ -5,6 +5,8 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { extname, join, resolve } from "node:path";
 import {
   applyLegacyCompaniesToNormalized,
+  applyMetricMonthMigration,
+  planMetricMonthMigration,
   ensureNormalizedDb,
   hydrateLegacyCompanies,
   normalizedCompanyDashboard,
@@ -14,8 +16,11 @@ import {
   writeNormalizedDb
 } from "./normalized-store.mjs";
 import {
+  deleteSupabaseMemberMetricsBefore,
+  fetchSupabaseRows,
   hasSupabaseBundledSyncLog,
   isSupabaseConfigured,
+  upsertSupabaseRows,
   readSupabaseAuditLogEntries,
   readSupabaseNormalizedDb,
   readSupabaseSyncState,
@@ -517,6 +522,61 @@ async function handleApi(request, response, pathname) {
     }
     const sync = startBundledDataSync(session);
     sendJson(response, 202, { ok: true, sync });
+    return true;
+  }
+
+  // 一度きりの修復用。旧実装で1行に上書きされ続けた実績を、当月の実績として付け替える。
+  if (pathname === "/api/admin/migrate-metric-months" && request.method === "POST") {
+    const session = requireSession(request, response);
+    if (!session) return true;
+    if (!session.permissions.canViewAll || !session.permissions.canEdit) {
+      sendJson(response, 403, { ok: false, message: "admin permission required" });
+      return true;
+    }
+    const now = new Date();
+    const targetMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    let result;
+    const writeTask = companyWriteQueue.then(async () => {
+      if (isSupabaseConfigured()) {
+        // 全件読み込みを避け、対象になる行だけを取得する
+        const staleRows = await fetchSupabaseRows("member_metrics", `select=*&metric_month=lt.${targetMonth}`);
+        const targetRows = await fetchSupabaseRows("member_metrics", `select=member_id&metric_month=eq.${targetMonth}`);
+        const plan = planMetricMonthMigration(
+          [...staleRows, ...targetRows.map((row) => ({ ...row, metric_month: targetMonth }))],
+          targetMonth
+        );
+        if (plan.inserts.length) await upsertSupabaseRows("member_metrics", "member_id,metric_month", plan.inserts);
+        if (plan.removed) await deleteSupabaseMemberMetricsBefore(targetMonth);
+        // 元の値を監査ログに残し、必要なら手で戻せるようにする
+        await upsertSupabaseRows("audit_logs", "id", [{
+          id: crypto.randomUUID(),
+          batch_id: null,
+          actor_id: null,
+          company_id: null,
+          target_type: "platform",
+          target_id: null,
+          action: "migrate_metric_months",
+          before_json: { rows: plan.snapshot },
+          after_json: { actor: session.name, targetMonth, moved: plan.inserts.length, removed: plan.removed, keptExisting: plan.keptExisting },
+          created_at: new Date().toISOString()
+        }]);
+        result = { moved: plan.inserts.length, removed: plan.removed, keptExisting: plan.keptExisting };
+        return;
+      }
+      const normalizedDb = await readStoreDb({ excludeTables: heavyReadExcludedTables });
+      const plan = applyMetricMonthMigration(normalizedDb, targetMonth);
+      await writeStoreDb(normalizedDb, { scope: "all", companyCodes: [] });
+      result = { moved: plan.inserts.length, removed: plan.removed, keptExisting: plan.keptExisting };
+    });
+    companyWriteQueue = writeTask.then(() => {}, () => {});
+    try {
+      await writeTask;
+    } catch (error) {
+      const { statusCode, payload } = apiErrorPayload(error);
+      sendJson(response, statusCode, payload);
+      return true;
+    }
+    sendJson(response, 200, { ok: true, targetMonth, ...result });
     return true;
   }
 
