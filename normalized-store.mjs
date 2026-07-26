@@ -420,6 +420,7 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
   const sessionsByMember = groupBy(tables.coaching_sessions, "member_id");
   const latestMetricByMember = latestBy(tables.member_metrics, "member_id", "metric_month");
   const metricsByMember = groupBy(tables.member_metrics, "member_id");
+  const summariesByCompany = groupBy(tables.company_monthly_summaries || [], "company_id");
   const latestSummaryByCompany = latestBy(tables.company_monthly_summaries, "company_id", "summary_month");
   const latestReportByCompany = latestBy(tables.client_reports || [], "company_id", "report_month");
 
@@ -493,11 +494,25 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
           };
         });
 
-      const currentEnrollment = summary?.enrollment_count ?? members.length;
+      // 月ごとの在籍数を実際の月の位置へ復元する。記録の無い月は未登録のまま残す。
       const enrollmentIndex = currentMonthIndexFor(months);
-      const enrollment = Array.isArray(legacyCompany?.enrollment) && legacyCompany.enrollment.length === months.length
-        ? legacyCompany.enrollment.map((value, index) => index === enrollmentIndex ? currentEnrollment : value)
-        : months.map(() => currentEnrollment);
+      const companySummaries = (summariesByCompany.get(company.id) || []);
+      const summaryYear = companySummaries.reduce((max, row) => {
+        const year = Number(String(row.summary_month || "").slice(0, 4));
+        return Number.isFinite(year) ? Math.max(max, year) : max;
+      }, 0);
+      const summaryByMonthNumber = new Map();
+      companySummaries.forEach((row) => {
+        const [year, month] = String(row.summary_month || "").split("-").map(Number);
+        if (year !== summaryYear) return;
+        summaryByMonthNumber.set(month, row);
+      });
+      const enrollment = months.map((label, index) => {
+        const row = summaryByMonthNumber.get(monthNumberFromLabel(label, index));
+        if (row) return Number(row.enrollment_count || 0);
+        // 当月は受講生数から必ず求まるので、記録が無くても表示できるようにする
+        return index === enrollmentIndex ? members.length : null;
+      });
 
       return {
         id: company.code,
@@ -699,26 +714,47 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
       }
     });
 
-    let summaryRow = latestSummaryForCompany(tables, company.id);
-    if (!summaryRow) {
-      summaryRow = {
-        company_id: company.id,
-        summary_month: reportMonth,
-        enrollment_count: 0,
-        new_count: 0,
-        build_count: 0,
-        pr_count: 0,
-        avg_progress_percent: 0,
-        total_sales_amount: 0,
-        risk_member_count: 0,
-        source_kind: "manual",
-        source_ref: {},
-        calculated_at: now
-      };
-      tables.company_monthly_summaries.push(summaryRow);
+    // 在籍数は月ごとに1行残し、月次の推移を追えるようにする
+    const summaryMonthIndex = currentMonthIndexFor(metricMonths);
+    const currentSummaryMonth = metricMonthKey(metricYear, monthNumberFromLabel(metricMonths[summaryMonthIndex], summaryMonthIndex));
+    const findOrCreateSummary = (monthKey) => {
+      let row = tables.company_monthly_summaries.find((item) => item.company_id === company.id && item.summary_month === monthKey);
+      if (!row) {
+        row = {
+          company_id: company.id,
+          summary_month: monthKey,
+          enrollment_count: 0,
+          new_count: 0,
+          build_count: 0,
+          pr_count: 0,
+          avg_progress_percent: 0,
+          total_sales_amount: 0,
+          risk_member_count: 0,
+          source_kind: "manual",
+          source_ref: {},
+          calculated_at: now
+        };
+        tables.company_monthly_summaries.push(row);
+      }
+      return row;
+    };
+
+    // 記録済みの過去月は在籍数だけ残し、他の集計値は当月の行にまとめる
+    if (Array.isArray(legacyCompany.enrollment)) {
+      metricMonths.forEach((label, index) => {
+        if (index === summaryMonthIndex) return;
+        const value = historyValue(legacyCompany.enrollment[index]);
+        if (value === null) return;
+        const pastRow = findOrCreateSummary(metricMonthKey(metricYear, monthNumberFromLabel(label, index)));
+        pastRow.enrollment_count = Math.max(0, Math.round(value));
+        pastRow.calculated_at = pastRow.calculated_at || now;
+      });
     }
+
+    const summaryRow = findOrCreateSummary(currentSummaryMonth);
     const activeMembers = tables.members.filter((member) => member.company_id === company.id && !member.deleted_at);
-    summaryRow.enrollment_count = legacyCompany.enrollment?.[legacyCompany.enrollment.length - 1] ?? activeMembers.length;
+    const currentEnrollmentValue = historyValue(legacyCompany.enrollment?.[summaryMonthIndex]);
+    summaryRow.enrollment_count = Math.max(0, Math.round(currentEnrollmentValue ?? activeMembers.length));
     summaryRow.new_count = Number(legacyCompany.newCount || 0);
     summaryRow.build_count = Number(legacyCompany.buildCount || 0);
     summaryRow.pr_count = Number(legacyCompany.prCount || 0);

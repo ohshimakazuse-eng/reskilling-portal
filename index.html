@@ -316,8 +316,12 @@
                   <p class="eyebrow">在籍推移</p>
                 <h2 id="trendTitle">在籍受講生の推移</h2>
                 </div>
-                <span class="pill" id="enrollmentVerdict">判定</span>
+                <div class="progress-editor-actions">
+                  <button class="ghost-button small" id="recordEnrollment" type="button">今月の在籍を記録</button>
+                  <span class="pill" id="enrollmentVerdict">判定</span>
+                </div>
               </div>
+              <p class="subtext progress-ai-status" id="enrollmentRecordStatus">受講生を追加・削除したあとに記録すると、その月の在籍数として残り、翌月以降に増減を比較できます。</p>
               <div class="line-chart" id="enrollmentChart" aria-label="在籍受講生の月別推移"></div>
             </section>
           </div>
