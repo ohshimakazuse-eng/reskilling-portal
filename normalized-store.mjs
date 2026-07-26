@@ -528,7 +528,8 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
           good: report.progress_good_text || "",
           issue: report.field_issue_text || "",
           action: report.operator_action_text || "",
-          request: report.client_request_text || ""
+          request: report.client_request_text || "",
+          ...(report.source_ref?.sections ? { sections: report.source_ref.sections } : {})
         } : legacyCompany?.progressReport,
         members
       };
@@ -768,12 +769,14 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
     summaryRow.calculated_at = now;
 
     if (legacyCompany.progressReport) {
+      // 進捗報告も対象月ごとに1件残す
+      const reportMonthKey = currentSummaryMonth;
       let reportRow = latestReportForCompany(tables, company.id);
-      if (!reportRow || reportRow.report_month !== reportMonth) {
+      if (!reportRow || reportRow.report_month !== reportMonthKey) {
         reportRow = {
           id: crypto.randomUUID(),
           company_id: company.id,
-          report_month: reportMonth,
+          report_month: reportMonthKey,
           executive_summary: null,
           focus_points: [],
           wins: [],
@@ -792,12 +795,20 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
         tables.client_reports = tables.client_reports || [];
         tables.client_reports.push(reportRow);
       }
-      reportRow.progress_good_text = legacyCompany.progressReport.good || "";
-      reportRow.field_issue_text = legacyCompany.progressReport.issue || "";
-      reportRow.operator_action_text = legacyCompany.progressReport.action || "";
-      reportRow.client_request_text = legacyCompany.progressReport.request || "";
+      const sections = legacyCompany.progressReport.sections || null;
+      // 8項目は source_ref に保存する（スキーマ変更を伴わない）。
+      // 既存の4カラムにも要約を入れ、古い読み出し経路が壊れないようにする。
+      reportRow.progress_good_text = sections
+        ? [sections.verdict, sections.verdictReason, sections.numbers].filter(Boolean).join("\n")
+        : (legacyCompany.progressReport.good || "");
+      reportRow.field_issue_text = sections ? (sections.rootCause || "") : (legacyCompany.progressReport.issue || "");
+      reportRow.operator_action_text = sections ? (sections.actions || "") : (legacyCompany.progressReport.action || "");
+      reportRow.client_request_text = sections
+        ? [sections.decisions, sections.nextReport].filter(Boolean).join("\n")
+        : (legacyCompany.progressReport.request || "");
+      reportRow.executive_summary = sections ? (sections.verdict || null) : reportRow.executive_summary;
       reportRow.source_kind = "manual";
-      reportRow.source_ref = { source: "frontend", actor };
+      reportRow.source_ref = { source: "frontend", actor, ...(sections ? { sections } : {}) };
       reportRow.status = "published";
       reportRow.published_at = reportRow.published_at || now;
       reportRow.updated_at = now;

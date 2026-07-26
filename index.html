@@ -262,22 +262,42 @@
                   </div>
                 </div>
                 <p class="subtext progress-ai-status" id="progressReportAiStatus">数字を更新したあとに生成すると、最新の実績をもとにした下書きが入ります。内容を確認・修正してから保存してください。</p>
-                <div class="progress-editor-grid">
+                <div class="progress-editor-grid report-sections">
                   <label>
-                    <span>良い変化</span>
-                    <textarea id="progressGood" rows="3"></textarea>
+                    <span>1. 判定</span>
+                    <textarea id="reportVerdict" rows="1" placeholder="順調 / 要注意 / 危険"></textarea>
                   </label>
                   <label>
-                    <span>確認したい点</span>
-                    <textarea id="progressIssue" rows="3"></textarea>
+                    <span>判定の根拠</span>
+                    <textarea id="reportVerdictReason" rows="3"></textarea>
                   </label>
                   <label>
-                    <span>今後の支援方針</span>
-                    <textarea id="progressAction" rows="3"></textarea>
+                    <span>2. 数値</span>
+                    <textarea id="reportNumbers" rows="4"></textarea>
                   </label>
                   <label>
-                    <span>貴社への確認事項</span>
-                    <textarea id="progressRequest" rows="3"></textarea>
+                    <span>3. 売上内訳</span>
+                    <textarea id="reportSalesBreakdown" rows="4"></textarea>
+                  </label>
+                  <label>
+                    <span>4. 主要KPI</span>
+                    <textarea id="reportKpi" rows="4"></textarea>
+                  </label>
+                  <label>
+                    <span>5. 未達原因</span>
+                    <textarea id="reportRootCause" rows="4"></textarea>
+                  </label>
+                  <label class="wide-field">
+                    <span>6. 今週の改善施策（対象者・担当者・実施内容・期限・完了条件・改善KPI・見込売上）</span>
+                    <textarea id="reportActions" rows="7"></textarea>
+                  </label>
+                  <label>
+                    <span>7. 経営判断が必要なこと</span>
+                    <textarea id="reportDecisions" rows="4"></textarea>
+                  </label>
+                  <label>
+                    <span>8. 次回報告</span>
+                    <textarea id="reportNextReport" rows="3"></textarea>
                   </label>
                 </div>
               </form>
