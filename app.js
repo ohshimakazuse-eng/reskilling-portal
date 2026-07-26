@@ -352,6 +352,8 @@ function renderSheetSyncStatus() {
   panel.style.display = visible ? "" : "none";
   const migrationPanel = $("#metricMigrationPanel");
   if (migrationPanel) migrationPanel.style.display = visible ? "" : "none";
+  const aiModelPanel = $("#aiModelPanel");
+  if (aiModelPanel) aiModelPanel.style.display = visible ? "" : "none";
   if (!visible) return;
   const sync = state.sheetSyncStatus;
   const label = {
@@ -487,6 +489,29 @@ async function generateProgressReportDraft() {
     window.alert(`下書きを生成できませんでした。\n${error.message}`);
   } finally {
     if (button) { button.disabled = false; button.textContent = originalText || "AIで下書きを生成"; }
+  }
+}
+
+async function checkAiModels() {
+  if (!roleCanManageCompanies()) return;
+  const button = $("#checkAiModels");
+  const status = $("#aiModelStatus");
+  const originalText = button?.textContent;
+  try {
+    if (button) { button.disabled = true; button.textContent = "確認中..."; }
+    const response = await fetch("/api/admin/ai-models", { headers: authHeaders() });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "モデル一覧を取得できませんでした。");
+    const chat = payload.models.filter((id) => /^(gpt|o[0-9]|chatgpt)/i.test(id)).slice(0, 30);
+    if (status) {
+      status.textContent = `現在の設定: ${payload.current}${payload.currentIsAvailable ? "（利用可能）" : "（このAPIキーでは利用できません）"}。`
+        + `利用できる主なモデル: ${(chat.length ? chat : payload.models.slice(0, 30)).join("、")}`;
+    }
+  } catch (error) {
+    if ([401, 403].includes(error?.status)) handleSessionExpired();
+    if (status) status.textContent = `モデル一覧を取得できませんでした: ${error.message}`;
+  } finally {
+    if (button) { button.disabled = false; button.textContent = originalText || "利用できるモデルを確認"; }
   }
 }
 
@@ -3244,6 +3269,7 @@ function bindEvents() {
 
   $("#generateProgressReport")?.addEventListener("click", () => void generateProgressReportDraft());
   $("#recordEnrollment")?.addEventListener("click", () => void recordEnrollmentForCurrentMonth());
+  $("#checkAiModels")?.addEventListener("click", () => void checkAiModels());
 
   $$(".table-sort").forEach((button) => {
     button.addEventListener("click", () => {
