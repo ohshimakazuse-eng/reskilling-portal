@@ -315,8 +315,9 @@ export function isAiConfigured() {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
+// 既定モデル。RenderのOPENAI_MODELで上書きできる。
 export function configuredModel() {
-  return process.env.OPENAI_MODEL || "gpt-4o";
+  return process.env.OPENAI_MODEL || "gpt-5.5";
 }
 
 function createClient(apiKey) {
