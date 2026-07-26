@@ -449,6 +449,52 @@ async function migrateMetricMonths() {
   }
 }
 
+async function generateProgressReportDraft() {
+  if (!roleCanEditProgressReport()) return;
+  const company = selectedCompany();
+  if (!company) return;
+  const button = $("#generateProgressReport");
+  const status = $("#progressReportAiStatus");
+  if (hasUnsavedProgressReportEdits()
+    && !window.confirm("編集中の内容がAIの下書きで置き換わります。よろしいですか？")) return;
+  const originalText = button?.textContent;
+  try {
+    if (button) { button.disabled = true; button.textContent = "生成中..."; }
+    if (status) status.textContent = `${company.name} の最新の数字をもとに下書きを作成しています...`;
+    const response = await fetch("/api/admin/progress-report/generate", {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({ companyId: company.id })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "下書きを生成できませんでした。");
+    setProgressReportFormValues(payload.report);
+    // 生成結果は下書き。講師が確認・編集して「保存して反映」を押すまでクライアントには出さない
+    state.progressReportDraft = {
+      companyId: company.id,
+      dirty: true,
+      values: progressReportFormValues()
+    };
+    updateDraftStatus();
+    if (status) {
+      status.textContent = payload.source === "ai"
+        ? `${payload.monthLabel}の実績をもとに下書きを作成しました。内容を確認・修正してから「保存して反映」を押してください。`
+        : `${payload.monthLabel}の実績から下書きを作成しました（AI未設定のため数字ベースの下書きです）。確認・修正してから保存してください。`;
+    }
+  } catch (error) {
+    if ([401, 403].includes(error?.status)) handleSessionExpired();
+    if (status) status.textContent = "下書きを生成できませんでした。時間をおいてもう一度お試しください。";
+    window.alert(`下書きを生成できませんでした。\n${error.message}`);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = originalText || "AIで下書きを生成"; }
+  }
+}
+
+function hasUnsavedProgressReportEdits() {
+  const company = selectedCompany();
+  return Boolean(company && state.progressReportDraft.companyId === company.id && state.progressReportDraft.dirty);
+}
+
 function loadAuthSession() {
   try {
     const stored = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -3112,6 +3158,8 @@ function bindEvents() {
     if (!event.target.matches("textarea")) return;
     rememberProgressReportDraft();
   });
+
+  $("#generateProgressReport")?.addEventListener("click", () => void generateProgressReportDraft());
 
   $$(".table-sort").forEach((button) => {
     button.addEventListener("click", () => {

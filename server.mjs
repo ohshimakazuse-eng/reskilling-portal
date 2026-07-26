@@ -16,6 +16,11 @@ import {
   writeNormalizedDb
 } from "./normalized-store.mjs";
 import {
+  buildCompanyFacts,
+  generateProgressReport,
+  isAiConfigured
+} from "./progress-report-ai.mjs";
+import {
   deleteSupabaseMemberMetricsBefore,
   fetchSupabaseRows,
   hasSupabaseBundledSyncLog,
@@ -522,6 +527,47 @@ async function handleApi(request, response, pathname) {
     }
     const sync = startBundledDataSync(session);
     sendJson(response, 202, { ok: true, sync });
+    return true;
+  }
+
+  // 運営が生成ボタンを押したときだけAIが下書きを作る。保存はせず、講師が確認・編集してから保存する。
+  if (pathname === "/api/admin/progress-report/generate" && request.method === "POST") {
+    const session = requireSession(request, response);
+    if (!session) return true;
+    if (!session.permissions.canEdit) {
+      sendJson(response, 403, { ok: false, message: "edit permission required" });
+      return true;
+    }
+    const body = await readJsonBody(request);
+    const companyId = String(body.companyId || "");
+    if (!companyId) {
+      sendJson(response, 400, { ok: false, message: "companyId is required" });
+      return true;
+    }
+    if (!session.permissions.canViewAll && companyId !== session.companyId) {
+      sendJson(response, 403, { ok: false, message: "company scope violation" });
+      return true;
+    }
+    try {
+      const readOptions = { companyCodes: [companyId], excludeTables: heavyReadExcludedTables };
+      const { db, companies } = await hydratedCompaniesForSession(null, readOptions);
+      const company = companies.find((item) => item.id === companyId);
+      if (!company) {
+        sendJson(response, 404, { ok: false, message: "company not found" });
+        return true;
+      }
+      const facts = buildCompanyFacts(company, db.months || defaultMonths);
+      const result = await generateProgressReport(facts);
+      sendJson(response, 200, {
+        ok: true,
+        report: result.report,
+        source: result.source,
+        monthLabel: facts.monthLabel
+      });
+    } catch (error) {
+      const { statusCode, payload } = apiErrorPayload(error);
+      sendJson(response, statusCode, payload);
+    }
     return true;
   }
 
