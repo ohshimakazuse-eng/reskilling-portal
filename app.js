@@ -354,6 +354,8 @@ function renderSheetSyncStatus() {
   if (migrationPanel) migrationPanel.style.display = visible ? "" : "none";
   const aiModelPanel = $("#aiModelPanel");
   if (aiModelPanel) aiModelPanel.style.display = visible ? "" : "none";
+  const enrollmentImportPanel = $("#enrollmentImportPanel");
+  if (enrollmentImportPanel) enrollmentImportPanel.style.display = visible ? "" : "none";
   if (!visible) return;
   const sync = state.sheetSyncStatus;
   const label = {
@@ -489,6 +491,37 @@ async function generateProgressReportDraft() {
     window.alert(`下書きを生成できませんでした。\n${error.message}`);
   } finally {
     if (button) { button.disabled = false; button.textContent = originalText || "AIで下書きを生成"; }
+  }
+}
+
+async function importEnrollmentHistory() {
+  if (!roleCanManageCompanies()) return;
+  const button = $("#importEnrollmentHistory");
+  const status = $("#enrollmentImportStatus");
+  if (!window.confirm("受講生リストの月別在籍数を各社の在籍推移へ取り込みます。\n記録のある月は上書きされます。よろしいですか？")) return;
+  const originalText = button?.textContent;
+  try {
+    if (button) { button.disabled = true; button.textContent = "取り込み中..."; }
+    const response = await fetch("/api/admin/import-enrollment-history", {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.message || "取り込みに失敗しました。");
+    if (status) {
+      status.textContent = `完了: ${payload.applied.length}社に取り込みました`
+        + `（${payload.applied.map((a) => `${a.name} ${a.months}か月`).join(" / ")}）。`
+        + `${payload.skipped.length ? `対象データが無い会社: ${payload.skipped.join("、")}。` : ""}`;
+    }
+    await hydratePlatformDataFromApi({ force: true, reason: "enrollment-import" });
+    renderAll();
+    window.alert(`${payload.applied.length}社の在籍推移を取り込みました。`);
+  } catch (error) {
+    if ([401, 403].includes(error?.status)) handleSessionExpired();
+    if (status) status.textContent = `取り込みに失敗しました: ${error.message}`;
+    window.alert(`取り込みに失敗しました。\n${error.message}`);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = originalText || "在籍推移を取り込む"; }
   }
 }
 
@@ -3252,6 +3285,7 @@ function bindEvents() {
   $("#generateProgressReport")?.addEventListener("click", () => void generateProgressReportDraft());
   $("#recordEnrollment")?.addEventListener("click", () => void recordEnrollmentForCurrentMonth());
   $("#checkAiModels")?.addEventListener("click", () => void checkAiModels());
+  $("#importEnrollmentHistory")?.addEventListener("click", () => void importEnrollmentHistory());
 
   $$(".table-sort").forEach((button) => {
     button.addEventListener("click", () => {
