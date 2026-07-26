@@ -17,8 +17,10 @@ import {
 } from "./normalized-store.mjs";
 import {
   buildCompanyFacts,
+  configuredModel,
   generateProgressReport,
-  isAiConfigured
+  isAiConfigured,
+  listAvailableModels
 } from "./progress-report-ai.mjs";
 import {
   deleteSupabaseMemberMetricsBefore,
@@ -527,6 +529,24 @@ async function handleApi(request, response, pathname) {
     }
     const sync = startBundledDataSync(session);
     sendJson(response, 202, { ok: true, sync });
+    return true;
+  }
+
+  // 設定すべきモデルIDを画面から確認できるようにする
+  if (pathname === "/api/admin/ai-models" && request.method === "GET") {
+    const session = requireSession(request, response);
+    if (!session) return true;
+    if (!session.permissions.canViewAll || !session.permissions.canEdit) {
+      sendJson(response, 403, { ok: false, message: "admin permission required" });
+      return true;
+    }
+    try {
+      const result = await listAvailableModels();
+      sendJson(response, 200, { ok: true, ...result });
+    } catch (error) {
+      const { statusCode, payload } = apiErrorPayload(error);
+      sendJson(response, statusCode, payload);
+    }
     return true;
   }
 

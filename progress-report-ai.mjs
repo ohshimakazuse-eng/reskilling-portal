@@ -315,6 +315,45 @@ export function isAiConfigured() {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
+export function configuredModel() {
+  return process.env.OPENAI_MODEL || "gpt-4o";
+}
+
+function createClient(apiKey) {
+  return new OpenAI({
+    apiKey,
+    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {})
+  });
+}
+
+// 設定すべきモデルIDを画面から確認できるようにする（推測でIDを決めないため）
+export async function listAvailableModels(options = {}) {
+  const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    const error = new Error("AIのAPIキーが設定されていません。RenderでOPENAI_API_KEYをご確認ください。");
+    error.statusCode = 400;
+    error.publicMessage = error.message;
+    throw error;
+  }
+  let models;
+  try {
+    const page = await createClient(apiKey).models.list();
+    models = (page.data || []).map((m) => m.id);
+  } catch (cause) {
+    throw aiRequestError(cause);
+  }
+  const current = configuredModel();
+  return {
+    current,
+    currentIsAvailable: models.includes(current),
+    // 会話生成に使えるモデルを先頭に寄せる（埋め込み・音声・画像系は後ろへ）
+    models: models.slice().sort((a, b) => {
+      const rank = (id) => (/embed|whisper|tts|dall|moderation|audio|image|realtime/.test(id) ? 1 : 0);
+      return rank(a) - rank(b) || a.localeCompare(b);
+    })
+  };
+}
+
 // APIキー未設定でも運用が止まらないよう、数字ベースの下書きを返す
 export function fallbackProgressReport(facts) {
   const cause = [...facts.causes].sort((a, b) => b.count - a.count)[0];
@@ -351,7 +390,7 @@ function aiRequestError(cause) {
   const status = cause?.status;
   if (status === 429) return build("AIの利用が混み合っています。1分ほど待ってからもう一度お試しください。", 429);
   if (status === 401 || status === 403) return build("AIの認証設定に問題があります。管理者にAPIキーの確認をご依頼ください。", 502);
-  if (status === 404) return build("指定されたAIモデルを利用できません。管理者にOPENAI_MODELの確認をご依頼ください。", 502);
+  if (status === 404) return build(`指定されたAIモデル「${configuredModel()}」は、このAPIキーでは利用できません。RenderのOPENAI_MODELを、利用可能なモデルIDに変更してください。`, 502);
   if (status === 400) return build("AIへの依頼内容に問題がありました。管理者にご連絡ください。", 502);
   if (status >= 500) return build("AIが一時的に応答していません。少し待ってからもう一度お試しください。", 503);
   if (cause instanceof OpenAI.APIConnectionError) return build("AIに接続できませんでした。通信状況を確認して、もう一度お試しください。", 503);
@@ -362,11 +401,8 @@ export async function generateProgressReport(facts, options = {}) {
   const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
   if (!apiKey) return { report: fallbackProgressReport(facts), source: "fallback" };
 
-  const client = new OpenAI({
-    apiKey,
-    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {})
-  });
-  const model = process.env.OPENAI_MODEL || "gpt-4o";
+  const client = createClient(apiKey);
+  const model = configuredModel();
 
   let response;
   try {
