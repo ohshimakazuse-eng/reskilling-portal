@@ -23,3 +23,6 @@ services:
         sync: false
       - key: OPERATOR_PASSWORD
         sync: false
+      # 進捗報告のAI生成に使用。未設定でも数字ベースの下書きにフォールバックする。
+      - key: ANTHROPIC_API_KEY
+        sync: false
