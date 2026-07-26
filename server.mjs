@@ -562,6 +562,7 @@ async function handleApi(request, response, pathname) {
         ok: true,
         report: result.report,
         source: result.source,
+        model: result.model || null,
         monthLabel: facts.monthLabel
       });
     } catch (error) {

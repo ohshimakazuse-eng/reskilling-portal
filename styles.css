@@ -3429,3 +3429,21 @@ td {
   margin: 0 0 10px;
   line-height: 1.6;
 }
+
+.report-sections .wide-field {
+  grid-column: 1 / -1;
+}
+
+.report-sections textarea {
+  line-height: 1.7;
+}
+
+.insight-card .verdict-value {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 2px 0 6px;
+}
+
+.insight-card p {
+  white-space: pre-wrap;
+}

@@ -468,7 +468,7 @@ async function generateProgressReportDraft() {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.message || "下書きを生成できませんでした。");
-    setProgressReportFormValues(payload.report);
+    setProgressReportFormValues({ sections: payload.report });
     // 生成結果は下書き。講師が確認・編集して「保存して反映」を押すまでクライアントには出さない
     state.progressReportDraft = {
       companyId: company.id,
@@ -1546,33 +1546,53 @@ function clientSafeText(value) {
 }
 
 function activeProgressReport(company) {
-  const report = { ...progressReportDefaults(company), ...(company.progressReport || {}) };
+  const stored = company.progressReport || {};
+  const sections = stored.sections && Object.values(stored.sections).some(Boolean)
+    ? stored.sections
+    // 8項目がまだ無い会社は、旧4項目を該当セクションへ移して表示する
+    : (() => {
+      const legacy = { ...progressReportDefaults(company), ...stored };
+      return {
+        verdict: "",
+        verdictReason: legacy.good || "",
+        numbers: "",
+        salesBreakdown: "",
+        kpi: "",
+        rootCause: legacy.issue || "",
+        actions: legacy.action || "",
+        decisions: legacy.request || "",
+        nextReport: ""
+      };
+    })();
   return {
-    good: clientSafeText(report.good),
-    issue: clientSafeText(report.issue),
-    action: clientSafeText(report.action),
-    request: clientSafeText(report.request)
+    sections: Object.fromEntries(REPORT_SECTIONS.map(([key]) => [key, clientSafeText(sections[key] || "")]))
   };
 }
 
+const REPORT_SECTIONS = [
+  ["verdict", "判定", "#reportVerdict"],
+  ["verdictReason", "判定の根拠", "#reportVerdictReason"],
+  ["numbers", "数値", "#reportNumbers"],
+  ["salesBreakdown", "売上内訳", "#reportSalesBreakdown"],
+  ["kpi", "主要KPI", "#reportKpi"],
+  ["rootCause", "未達原因", "#reportRootCause"],
+  ["actions", "今週の改善施策", "#reportActions"],
+  ["decisions", "経営判断が必要なこと", "#reportDecisions"],
+  ["nextReport", "次回報告", "#reportNextReport"]
+];
+
 function progressReportFormValues() {
   return {
-    good: $("#progressGood")?.value || "",
-    issue: $("#progressIssue")?.value || "",
-    action: $("#progressAction")?.value || "",
-    request: $("#progressRequest")?.value || ""
+    sections: Object.fromEntries(REPORT_SECTIONS.map(([key, , selector]) => [key, $(selector)?.value || ""]))
   };
 }
 
 function setProgressReportFormValues(values) {
-  [
-    ["#progressGood", values.good],
-    ["#progressIssue", values.issue],
-    ["#progressAction", values.action],
-    ["#progressRequest", values.request]
-  ].forEach(([selector, value]) => {
+  const sections = values?.sections || {};
+  REPORT_SECTIONS.forEach(([key, , selector]) => {
     const field = $(selector);
-    if (field && field.value !== String(value || "")) field.value = value || "";
+    const value = String(sections[key] ?? "");
+    if (field && field.value !== value) field.value = value;
   });
 }
 
@@ -1610,17 +1630,39 @@ function renderExecutiveSummary() {
   $("#execStatusPill").textContent = verdict.label;
   $("#execStatusPill").className = `pill ${verdict.tone === "danger" ? "danger" : ""}`;
   $("#execMessage").textContent = verdict.text;
+  const sectionTone = {
+    verdictReason: report.sections.verdict.includes("危険") ? "danger" : report.sections.verdict.includes("要注意") ? "warn" : "good",
+    numbers: "good",
+    salesBreakdown: "good",
+    kpi: "good",
+    rootCause: blockers.length ? "danger" : "good",
+    actions: risk > 0 ? "warn" : "good",
+    decisions: "warn",
+    nextReport: ""
+  };
+  const verdictText = report.sections.verdict.trim();
   $("#execInsights").innerHTML = [
-    { title: "良い変化", body: report.good, tone: "good" },
-    { title: "確認したい点", body: report.issue, tone: blockers.length ? "danger" : "good" },
-    { title: "今後の支援方針", body: report.action, tone: risk > 0 ? "warn" : "good" },
-    { title: "貴社への確認事項", body: report.request, tone: "warn" }
-  ].map((item) => `
-    <article class="insight-card ${item.tone}">
-      <strong>${escapeHtml(item.title)}</strong>
-      <p>${escapeHtml(item.body)}</p>
-    </article>
-  `).join("");
+    verdictText ? `
+      <article class="insight-card verdict-card ${sectionTone.verdictReason}">
+        <strong>判定</strong>
+        <p class="verdict-value">${escapeHtml(verdictText)}</p>
+        <p>${escapeHtml(report.sections.verdictReason)}</p>
+      </article>
+    ` : "",
+    ...REPORT_SECTIONS
+      .filter(([key]) => !["verdict", "verdictReason"].includes(key))
+      .filter(([key]) => report.sections[key]?.trim())
+      .map(([key, label], index) => `
+        <article class="insight-card ${sectionTone[key] || ""}">
+          <strong>${index + 2}. ${escapeHtml(label)}</strong>
+          <p>${escapeHtml(report.sections[key])}</p>
+        </article>
+      `),
+    // 判定も本文も無い会社は、まだ生成されていないことを明示する
+    verdictText || REPORT_SECTIONS.some(([key]) => report.sections[key]?.trim())
+      ? ""
+      : `<article class="insight-card"><strong>未作成</strong><p>「AIで下書きを生成」から今月の進捗を作成してください。</p></article>`
+  ].join("");
   $("#progressReportForm").style.display = roleCanEditProgressReport() ? "" : "none";
   const editorValues = state.progressReportDraft.companyId === company.id && state.progressReportDraft.dirty
     ? state.progressReportDraft.values
@@ -3187,10 +3229,7 @@ function bindEvents() {
     if (!roleCanEditProgressReport()) return;
     const company = selectedCompany();
     company.progressReport = {
-      good: $("#progressGood").value.trim(),
-      issue: $("#progressIssue").value.trim(),
-      action: $("#progressAction").value.trim(),
-      request: $("#progressRequest").value.trim()
+      sections: Object.fromEntries(REPORT_SECTIONS.map(([key, , selector]) => [key, ($(selector)?.value || "").trim()]))
     };
     resetProgressReportDraft(company.id);
     addOperation("進捗報告", "今月の進捗を更新", "会社ページの進捗報告を保存して反映");
