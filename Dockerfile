@@ -10,6 +10,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY index.html app.js styles.css server.mjs data.js ./
 COPY normalized-store.mjs supabase-store.mjs progress-report-ai.mjs ./
+COPY enrollment-history.json ./
 COPY assets ./assets
 
 EXPOSE 4173

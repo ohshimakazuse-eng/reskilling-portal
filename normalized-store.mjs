@@ -213,6 +213,15 @@ function metricMonthKey(year, monthNumber) {
   return `${year}-${String(monthNumber).padStart(2, "0")}-01`;
 }
 
+// グラフは直近12か月(例: 8月..7月)を表示するため、月ラベルが指す年は当月をまたぐ。
+// 当月以前の月は今年、当月より後の月は昨年として扱う。
+function monthKeyForLabel(months, index, date = new Date()) {
+  const monthNumber = monthNumberFromLabel(months[index], index);
+  const currentMonth = date.getMonth() + 1;
+  const year = monthNumber <= currentMonth ? date.getFullYear() : date.getFullYear() - 1;
+  return metricMonthKey(year, monthNumber);
+}
+
 // 当月の位置。当月ラベルが無い月構成でも末尾ではなく直近の過去月へ寄せる
 function currentMonthIndexFor(months, date = new Date()) {
   const target = date.getMonth() + 1;
@@ -232,7 +241,7 @@ function historyValue(value) {
 }
 
 // 月ごとの実績を1行ずつ保存し、過去月の数字を残して比較できるようにする
-function upsertMemberMetricHistory(tables, memberId, months, year, legacyMember) {
+function upsertMemberMetricHistory(tables, memberId, months, legacyMember) {
   const sales = Array.isArray(legacyMember.salesHistory) ? legacyMember.salesHistory : null;
   const followers = Array.isArray(legacyMember.followerHistory) ? legacyMember.followerHistory : null;
   if (!sales && !followers) return false;
@@ -243,7 +252,7 @@ function upsertMemberMetricHistory(tables, memberId, months, year, legacyMember)
     const salesValue = sales ? historyValue(sales[index]) : null;
     if (followerValue !== null) carriedFollower = followerValue;
     if (followerValue === null && salesValue === null) return;
-    const monthKey = metricMonthKey(year, monthNumberFromLabel(label, index));
+    const monthKey = monthKeyForLabel(months, index);
     // フォロワーは累計値のため、その月の登録がなければ直近値を引き継ぐ
     upsertMemberMetric(tables, memberId, monthKey, salesValue, followerValue !== null ? followerValue : carriedFollower);
     wrote = true;
@@ -435,18 +444,10 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
         .map((member) => {
           const metric = latestMetricByMember.get(member.id);
           // 月次実績を「月ラベル → 実績行」に対応付け、実際の月の位置へ復元する
-          const memberMetrics = metricsByMember.get(member.id) || [];
-          const metricYear = memberMetrics.reduce((max, row) => {
-            const year = Number(String(row.metric_month || "").slice(0, 4));
-            return Number.isFinite(year) ? Math.max(max, year) : max;
-          }, 0);
-          const metricByMonthNumber = new Map();
-          memberMetrics.forEach((row) => {
-            const [year, month] = String(row.metric_month || "").split("-").map(Number);
-            if (year !== metricYear) return;
-            metricByMonthNumber.set(month, row);
-          });
-          const metricForIndex = (label, index) => metricByMonthNumber.get(monthNumberFromLabel(label, index)) || null;
+          const metricByMonth = new Map(
+            (metricsByMember.get(member.id) || []).map((row) => [String(row.metric_month), row])
+          );
+          const metricForIndex = (label, index) => metricByMonth.get(monthKeyForLabel(months, index)) || null;
           const milestoneValues = {};
           (milestonesByMember.get(member.id) || []).forEach((milestone) => {
             const legacyKey = reverseMilestoneMap[milestone.milestone_key];
@@ -496,19 +497,11 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
 
       // 月ごとの在籍数を実際の月の位置へ復元する。記録の無い月は未登録のまま残す。
       const enrollmentIndex = currentMonthIndexFor(months);
-      const companySummaries = (summariesByCompany.get(company.id) || []);
-      const summaryYear = companySummaries.reduce((max, row) => {
-        const year = Number(String(row.summary_month || "").slice(0, 4));
-        return Number.isFinite(year) ? Math.max(max, year) : max;
-      }, 0);
-      const summaryByMonthNumber = new Map();
-      companySummaries.forEach((row) => {
-        const [year, month] = String(row.summary_month || "").split("-").map(Number);
-        if (year !== summaryYear) return;
-        summaryByMonthNumber.set(month, row);
-      });
+      const summaryByMonth = new Map(
+        (summariesByCompany.get(company.id) || []).map((row) => [String(row.summary_month), row])
+      );
       const enrollment = months.map((label, index) => {
-        const row = summaryByMonthNumber.get(monthNumberFromLabel(label, index));
+        const row = summaryByMonth.get(monthKeyForLabel(months, index));
         if (row) return Number(row.enrollment_count || 0);
         // 当月は受講生数から必ず求まるので、記録が無くても表示できるようにする
         return index === enrollmentIndex ? members.length : null;
@@ -629,7 +622,6 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
   const batchId = crypto.randomUUID();
   const now = new Date().toISOString();
   const metricMonths = Array.isArray(options.months) && options.months.length ? options.months : defaultMetricMonths;
-  const metricYear = new Date().getFullYear();
   tables.update_batches.unshift({
     id: batchId,
     company_id: null,
@@ -702,7 +694,7 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
       replaceMemberAccounts(tables, member.id, legacyMember.accountLinks, legacyMember.stage);
       upsertMemberMilestones(tables, member.id, legacyMember);
       // 月次履歴があれば月ごとに保存し、無い旧形式のみ従来どおり対象月へ1件保存する
-      if (!upsertMemberMetricHistory(tables, member.id, metricMonths, metricYear, legacyMember)) {
+      if (!upsertMemberMetricHistory(tables, member.id, metricMonths, legacyMember)) {
         upsertMemberMetric(tables, member.id, reportMonth, latestSales, latestFollowers);
       }
       replaceMemberSessions(tables, company.id, member.id, legacyMember.meetings);
@@ -717,7 +709,7 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
 
     // 在籍数は月ごとに1行残し、月次の推移を追えるようにする
     const summaryMonthIndex = currentMonthIndexFor(metricMonths);
-    const currentSummaryMonth = metricMonthKey(metricYear, monthNumberFromLabel(metricMonths[summaryMonthIndex], summaryMonthIndex));
+    const currentSummaryMonth = monthKeyForLabel(metricMonths, summaryMonthIndex);
     const findOrCreateSummary = (monthKey) => {
       let row = tables.company_monthly_summaries.find((item) => item.company_id === company.id && item.summary_month === monthKey);
       if (!row) {
@@ -746,7 +738,7 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
         if (index === summaryMonthIndex) return;
         const value = historyValue(legacyCompany.enrollment[index]);
         if (value === null) return;
-        const pastRow = findOrCreateSummary(metricMonthKey(metricYear, monthNumberFromLabel(label, index)));
+        const pastRow = findOrCreateSummary(monthKeyForLabel(metricMonths, index));
         pastRow.enrollment_count = Math.max(0, Math.round(value));
         pastRow.calculated_at = pastRow.calculated_at || now;
       });

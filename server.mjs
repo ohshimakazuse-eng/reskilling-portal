@@ -532,6 +532,54 @@ async function handleApi(request, response, pathname) {
     return true;
   }
 
+  // 受講生リスト(Excel)から取り出した月別在籍数を、一度だけ取り込む
+  if (pathname === "/api/admin/import-enrollment-history" && request.method === "POST") {
+    const session = requireSession(request, response);
+    if (!session) return true;
+    if (!session.permissions.canViewAll || !session.permissions.canEdit) {
+      sendJson(response, 403, { ok: false, message: "admin permission required" });
+      return true;
+    }
+    let result;
+    const writeTask = companyWriteQueue.then(async () => {
+      const history = JSON.parse(await readFile(join(root, "enrollment-history.json"), "utf8"));
+      const readOptions = { excludeTables: heavyReadExcludedTables };
+      const { db, normalizedDb, companies } = await hydratedCompaniesForSession(null, readOptions);
+      const months = db.months || defaultMonths;
+      const applied = [];
+      const skipped = [];
+      const targets = companies.filter((company) => history.companies[company.id]).map((company) => {
+        const byMonth = history.companies[company.id];
+        const enrollment = months.map((label, index) => {
+          const monthNumber = Number(String(label).match(/(\d{1,2})/)?.[1] ?? index + 1);
+          const recorded = byMonth[String(monthNumber)];
+          // 記録がある月だけ上書きし、無い月は現状のまま残す
+          return recorded === undefined ? (company.enrollment?.[index] ?? null) : Number(recorded);
+        });
+        applied.push({ id: company.id, name: company.name, months: Object.keys(byMonth).length });
+        return { ...company, enrollment };
+      });
+      companies.forEach((company) => {
+        if (!history.companies[company.id]) skipped.push(company.name);
+      });
+      if (targets.length) {
+        applyLegacyCompaniesToNormalized(normalizedDb, targets, session.name, "受講生リストから月別在籍数を取り込み", { months });
+        await writeStoreDb(normalizedDb, { scope: "all", companyCodes: [] });
+      }
+      result = { applied, skipped };
+    });
+    companyWriteQueue = writeTask.then(() => {}, () => {});
+    try {
+      await writeTask;
+    } catch (error) {
+      const { statusCode, payload } = apiErrorPayload(error);
+      sendJson(response, statusCode, payload);
+      return true;
+    }
+    sendJson(response, 200, { ok: true, ...result });
+    return true;
+  }
+
   // 設定すべきモデルIDを画面から確認できるようにする
   if (pathname === "/api/admin/ai-models" && request.method === "GET") {
     const session = requireSession(request, response);
