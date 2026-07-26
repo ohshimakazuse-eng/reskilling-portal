@@ -256,8 +256,12 @@
                     <p class="eyebrow">管理者更新</p>
                     <h3>今月の進捗を編集</h3>
                   </div>
-                  <button class="primary-button small" type="submit">保存して反映</button>
+                  <div class="progress-editor-actions">
+                    <button class="ghost-button small" id="generateProgressReport" type="button">AIで下書きを生成</button>
+                    <button class="primary-button small" type="submit">保存して反映</button>
+                  </div>
                 </div>
+                <p class="subtext progress-ai-status" id="progressReportAiStatus">数字を更新したあとに生成すると、最新の実績をもとにした下書きが入ります。内容を確認・修正してから保存してください。</p>
                 <div class="progress-editor-grid">
                   <label>
                     <span>良い変化</span>

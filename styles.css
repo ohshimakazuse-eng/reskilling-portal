@@ -3417,3 +3417,15 @@ td {
   opacity: 0;
   pointer-events: none;
 }
+
+.progress-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.progress-ai-status {
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
