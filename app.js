@@ -490,6 +490,42 @@ async function generateProgressReportDraft() {
   }
 }
 
+// 押した時点の受講生数を、その月の在籍数として記録する
+async function recordEnrollmentForCurrentMonth() {
+  if (!roleCanEdit()) return;
+  const company = selectedCompany();
+  if (!company) return;
+  const button = $("#recordEnrollment");
+  const status = $("#enrollmentRecordStatus");
+  const monthIndex = currentMonthIndex();
+  const monthLabel = months[monthIndex] || formatMonthLabel();
+  const count = (company.members || []).length;
+  const previous = historyValue(company.enrollment?.[monthIndex]);
+  if (previous !== null && previous !== count
+    && !window.confirm(`${monthLabel}の在籍数を ${previous}名 から ${count}名 に更新します。よろしいですか？`)) return;
+
+  const originalText = button?.textContent;
+  const beforeEnrollment = Array.isArray(company.enrollment) ? [...company.enrollment] : null;
+  try {
+    if (button) { button.disabled = true; button.textContent = "記録中..."; }
+    company.enrollment = ensureHistoryLength(company.enrollment, null);
+    company.enrollment[monthIndex] = count;
+    const saved = await persistAndRefresh(null, `${company.name}: ${monthLabel}の在籍${count}名を記録`);
+    if (!saved) {
+      if (beforeEnrollment) company.enrollment = beforeEnrollment;
+      return;
+    }
+    if (status) status.textContent = `${monthLabel}の在籍数 ${count}名 を記録しました。翌月に記録すると増減を比較できます。`;
+    addOperation("在籍記録", `${monthLabel}の在籍を記録`, `${company.name} / ${count}名`);
+  } catch (error) {
+    if (beforeEnrollment) company.enrollment = beforeEnrollment;
+    if (status) status.textContent = "記録に失敗しました。時間をおいてもう一度お試しください。";
+    window.alert(`在籍数を記録できませんでした。\n${error.message}`);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = originalText || "今月の在籍を記録"; }
+  }
+}
+
 function hasUnsavedProgressReportEdits() {
   const company = selectedCompany();
   return Boolean(company && state.progressReportDraft.companyId === company.id && state.progressReportDraft.dirty);
@@ -1180,6 +1216,10 @@ function applyRolePermissions() {
   if (memberAdminPanel) memberAdminPanel.style.display = canManageMembers ? "" : "none";
   if (companyCreatePanel) companyCreatePanel.style.display = roleCanManageCompanies() ? "" : "none";
   if (detailInputs) detailInputs.style.display = canUseDetailQuickEdit ? "" : "none";
+  const enrollmentRecord = $("#recordEnrollment");
+  const enrollmentRecordStatus = $("#enrollmentRecordStatus");
+  if (enrollmentRecord) enrollmentRecord.style.display = canEdit ? "" : "none";
+  if (enrollmentRecordStatus) enrollmentRecordStatus.style.display = canEdit ? "" : "none";
   if (detailUpdateJump) detailUpdateJump.style.display = canEdit ? "" : "none";
   if (monthlyResetButton) monthlyResetButton.style.display = "none";
   $$("#saveUpdateSheet, #discardUpdateDrafts").forEach((button) => {
@@ -1628,6 +1668,7 @@ function lastTwelveMonthLabels(date = new Date()) {
     const monthDate = new Date(date.getFullYear(), date.getMonth() - 11 + index, 1);
     return {
       label: `${monthDate.getMonth() + 1}月`,
+      monthNumber: monthDate.getMonth() + 1,
       isCurrent: monthDate.getFullYear() === date.getFullYear() && monthDate.getMonth() === date.getMonth()
     };
   });
@@ -1636,9 +1677,12 @@ function lastTwelveMonthLabels(date = new Date()) {
 function renderChart() {
   const company = selectedCompany();
   const labels = lastTwelveMonthLabels();
-  const source = Array.isArray(company.enrollment) ? company.enrollment.slice(-12) : [];
-  const padded = Array(Math.max(0, 12 - source.length)).fill(null).concat(source).slice(-12);
-  const values = padded.map((value) => Number.isFinite(Number(value)) ? Number(value) : null);
+  // enrollment は months(1月..12月)に揃っているため、位置ではなく月番号で対応させる
+  const byMonthNumber = new Map();
+  (Array.isArray(company.enrollment) ? company.enrollment : []).forEach((value, index) => {
+    byMonthNumber.set(monthNumberFromLabel(months[index], index), historyValue(value));
+  });
+  const values = labels.map((item) => byMonthNumber.get(item.monthNumber) ?? null);
   const numericValues = values.filter((value) => value !== null);
   const max = Math.max(...numericValues, 1);
   const verdict = trendVerdict(numericValues, 0);
@@ -3160,6 +3204,7 @@ function bindEvents() {
   });
 
   $("#generateProgressReport")?.addEventListener("click", () => void generateProgressReportDraft());
+  $("#recordEnrollment")?.addEventListener("click", () => void recordEnrollmentForCurrentMonth());
 
   $$(".table-sort").forEach((button) => {
     button.addEventListener("click", () => {
