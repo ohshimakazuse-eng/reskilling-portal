@@ -190,14 +190,26 @@ export function buildCompanyFacts(company, months, date = new Date()) {
     causes: causeOrder.map((key) => ({ key, count: causes[key].length, members: causes[key] })),
     coaches: [...coachCounts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     unmeasured: UNMEASURED,
+    // 同じ画面に既に出ている数字。報告で繰り返すと重複になる
+    dashboardVisible: [
+      `在籍数 ${memberFacts.length}名`,
+      `当月売上 ${totalSales.toLocaleString("ja-JP")}円`,
+      `平均進捗率 ${memberFacts.length ? Math.round(memberFacts.reduce((s, m) => s + m.progressPercent, 0) / memberFacts.length) : 0}%`,
+      `要確認人数 ${memberFacts.filter((m) => m.evaluation === "F" || m.progressPercent < 35).length}名`,
+      `PR人数 ${memberFacts.filter((m) => m.stage === "PR").length}名 / 構築人数 ${memberFacts.filter((m) => m.stage === "構築").length}名`,
+      `フォロワー1000人達成 ${memberFacts.filter((m) => m.milestones.f1000).length}名`,
+      `評価分布（S/A/B/F の人数と割合）`,
+      `売上上位5名の氏名と金額`,
+      `在籍受講生の月別推移`
+    ],
     members: memberFacts
   };
 }
 
 const SECTIONS = [
-  ["numbers", "数値", "現在売上・前回報告時の売上・増加額・月末着地見込を記載する。月間目標が未計測のため進捗率と不足額は「未計測」と明記する"],
-  ["salesBreakdown", "売上内訳", "売上発生人数・1人あたり平均売上・上位者への集中率・上位者名と金額。講師本人と研修生の区分は未計測と明記する"],
-  ["kpi", "主要KPI", "稼働人数・投稿開始人数・商品申請済み人数・月1件獲得達成人数・要確認人数・F評価人数・MTG実施件数。投稿本数/案件提案数/商談数/成約数は未計測と明記する"],
+  ["numbers", "数値", "前回報告時からの増減と月末着地見込に絞る。現在売上・在籍数・平均進捗・要確認人数は同じ画面に表示済みのため書かない。月間目標が未計測のため進捗率と不足額は「未計測」と明記する"],
+  ["salesBreakdown", "売上内訳", "売上発生人数・売上発生者1人あたり平均・上位への集中率と、そこから読み取れるリスクを書く。上位者の氏名と金額は同じ画面に一覧があるため列挙しない。講師本人と研修生の区分は未計測と明記する"],
+  ["kpi", "主要KPI", "画面に出ていないKPIだけを書く（稼働人数・投稿開始人数・商品申請済み人数・MTG実施件数・アカウント未登録人数）。在籍数・PR人数・評価分布・平均進捗・要確認人数は画面に表示済みのため書かない。投稿本数/案件提案数/商談数/成約数は未計測と明記する"],
   ["rootCause", "未達原因", "未稼働・投稿不足・CR不足・案件不足・連絡停止それぞれの人数と、代表的な該当者名・根拠を記載する。感想は書かない"],
   ["actions", "今週の改善施策", "対象者・担当者・実施内容・実施期限・完了条件・改善するKPI・見込売上を必ずセットで、2〜3件記載する"],
   ["decisions", "経営判断が必要なこと", "追加人員・施策変更・顧客確認・対象者の継続判断など、現場だけでは決められないことを具体的に記載する。無い場合はその旨を書く"],
@@ -234,6 +246,11 @@ const SYSTEM_PROMPT = `あなたは法人向けSNS運用研修サービスの運
 8. 社内用語は使わない。「要対応」→「要確認」、「停滞」→「進行確認」、「F評価」→「確認優先」と言い換える。
 9. 敬体（です・ます）で書く。箇条書きの記号（・や-）は使ってよいが、見出しは付けない（見出しは画面側で付く）。
 10. 各項目は事実の密度を優先し、冗長な前置きを書かない。
+11. この報告は、同じ画面のグラフやサマリーの下に並んで表示されます。
+    「画面に表示済みの数字」として渡された値は、読み手がすぐ上で見ているため繰り返さない。
+    それらに触れる必要があるときは数字を再掲せず、「在籍数に対して」のように文脈として使うか、
+    画面では分からない差分・比率・原因とセットにして初めて挙げる。
+    報告の価値は、画面を見ても分からないこと（前月からの変化、集中リスク、未達の原因、次の打ち手）に置く。
 
 ## 施策に必ず含める7点
 
@@ -300,6 +317,9 @@ ${causeLines}
 # 担当者（直近MTGの担当）
 ${facts.coaches.length ? facts.coaches.map((c) => `${c.name}: ${c.count}名を担当`).join(" / ") : "担当者の記録なし（施策には「担当者未定（要割当）」と記載すること）"}
 
+# 画面に表示済みの数字（すぐ上に出ているため、報告で数値を繰り返さないこと）
+${facts.dashboardVisible.map((v) => `- ${v}`).join("\n")}
+
 # 未計測の指標（推測禁止。必ず「未計測」と書くこと）
 ${facts.unmeasured.map((u) => `- ${u}`).join("\n")}
 
@@ -359,9 +379,17 @@ export function fallbackProgressReport(facts) {
   const targets = cause?.members.slice(0, 4).map((m) => m.name).join("、") || "対象者なし";
   const coach = facts.coaches[0]?.name || "担当者未定（要割当）";
   return {
-    numbers: `現在売上 ${yen(facts.sales.current)} / 前回報告時 ${yen(facts.sales.previousReport)} / 増加額 ${facts.sales.increase >= 0 ? "+" : ""}${yen(facts.sales.increase)} / 月末着地見込 ${yen(facts.sales.projectedMonthEnd)}（当月ペースの日割り換算、残り${facts.daysRemainingInMonth}日）。月間売上目標が未計測のため、進捗率と不足額は未計測です。`,
-    salesBreakdown: `売上発生人数 ${facts.sales.earnerCount}名 / 1人あたり平均 ${yen(facts.sales.averagePerEarner)} / 上位1名への集中率 ${facts.sales.topOneSharePercent ?? "算出不可"}% / 上位3名 ${facts.sales.topThreeSharePercent ?? "算出不可"}%。上位者は${facts.sales.topEarners.map((m) => `${m.name} ${yen(m.sales)}`).join("、") || "なし"}です。講師本人と研修生の売上区分は未計測です。`,
-    kpi: `${Object.entries(facts.kpi).map(([k, v]) => `${k} ${v}`).join(" / ")}。投稿本数・案件提案数・商談数・成約数は未計測です。`,
+    // 画面に出ている数字（現在売上・在籍・平均進捗・要確認・上位者名）は繰り返さない
+    numbers: `前回報告時から ${facts.sales.increase >= 0 ? "+" : ""}${yen(facts.sales.increase)} の増減です（前回報告時 ${yen(facts.sales.previousReport)}）。`
+      + `当月ペースの日割り換算による月末着地見込は ${yen(facts.sales.projectedMonthEnd)}、残り${facts.daysRemainingInMonth}日です。`
+      + `月間売上目標が未計測のため、進捗率と目標に対する不足額は未計測です。`,
+    salesBreakdown: `売上が発生しているのは ${facts.sales.earnerCount}名、売上発生者1人あたり平均は ${yen(facts.sales.averagePerEarner)} です。`
+      + `上位1名への集中率は ${facts.sales.topOneSharePercent ?? "算出不可"}%、上位3名で ${facts.sales.topThreeSharePercent ?? "算出不可"}% です。`
+      + `${Number(facts.sales.topOneSharePercent) >= 50 ? "特定の受講生への依存度が高く、その1名の稼働が止まると当月着地が大きく下振れします。" : ""}`
+      + `講師本人と研修生の売上区分は未計測です。`,
+    kpi: `稼働人数 ${facts.kpi.稼働人数}名 / 投稿開始人数 ${facts.kpi.投稿開始人数}名 / 商品申請済み人数 ${facts.kpi.商品申請済み人数}名 / `
+      + `MTG実施件数 ${facts.kpi.MTG実施件数}件 / アカウント未登録人数 ${facts.kpi.アカウント未登録人数}名です。`
+      + `投稿本数・案件提案数・商談数・成約数は未計測です。`,
     rootCause: facts.causes.map((c) => `${c.key} ${c.count}名`).join(" / ") + `。${cause && cause.count ? `最多は${cause.key}の${cause.count}名で、${targets}が該当します。` : ""}`,
     actions: cause && cause.count
       ? `対象者: ${targets}（${cause.key} ${cause.count}名のうち優先4名） / 担当者: ${coach} / 実施内容: 個別接触のうえ${cause.key}の解消手順を提示 / 実施期限: ${facts.today}から3日以内 / 完了条件: 投稿再開または案件提案が確定した時点 / 改善KPI: 稼働人数（現在${facts.kpi.稼働人数}名） / 見込売上: ${yen(facts.sales.averagePerEarner * 2)}（1人あたり平均${yen(facts.sales.averagePerEarner)}×2名）`
