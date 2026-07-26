@@ -3438,12 +3438,6 @@ td {
   line-height: 1.7;
 }
 
-.insight-card .verdict-value {
-  font-size: 22px;
-  font-weight: 700;
-  margin: 2px 0 6px;
-}
-
 .insight-card p {
   white-space: pre-wrap;
 }

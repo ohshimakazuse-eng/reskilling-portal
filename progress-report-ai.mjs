@@ -195,8 +195,6 @@ export function buildCompanyFacts(company, months, date = new Date()) {
 }
 
 const SECTIONS = [
-  ["verdict", "判定", "順調 / 要注意 / 危険 のいずれか1語のみ"],
-  ["verdictReason", "判定の根拠", "なぜその判定なのかを、数字を挙げて2〜3文で述べる"],
   ["numbers", "数値", "現在売上・前回報告時の売上・増加額・月末着地見込を記載する。月間目標が未計測のため進捗率と不足額は「未計測」と明記する"],
   ["salesBreakdown", "売上内訳", "売上発生人数・1人あたり平均売上・上位者への集中率・上位者名と金額。講師本人と研修生の区分は未計測と明記する"],
   ["kpi", "主要KPI", "稼働人数・投稿開始人数・商品申請済み人数・月1件獲得達成人数・要確認人数・F評価人数・MTG実施件数。投稿本数/案件提案数/商談数/成約数は未計測と明記する"],
@@ -360,12 +358,7 @@ export function fallbackProgressReport(facts) {
   const cause = [...facts.causes].sort((a, b) => b.count - a.count)[0];
   const targets = cause?.members.slice(0, 4).map((m) => m.name).join("、") || "対象者なし";
   const coach = facts.coaches[0]?.name || "担当者未定（要割当）";
-  const verdict = facts.sales.current <= 0 ? "危険"
-    : facts.sales.increase < 0 ? "要注意"
-      : facts.kpi.F評価人数 > facts.enrollment * 0.3 ? "要注意" : "順調";
   return {
-    verdict,
-    verdictReason: `当月売上は${yen(facts.sales.current)}で前回報告時から${facts.sales.increase >= 0 ? "+" : ""}${yen(facts.sales.increase)}です。売上発生は${facts.sales.earnerCount}名、確認優先は${facts.kpi.F評価人数}名です。`,
     numbers: `現在売上 ${yen(facts.sales.current)} / 前回報告時 ${yen(facts.sales.previousReport)} / 増加額 ${facts.sales.increase >= 0 ? "+" : ""}${yen(facts.sales.increase)} / 月末着地見込 ${yen(facts.sales.projectedMonthEnd)}（当月ペースの日割り換算、残り${facts.daysRemainingInMonth}日）。月間売上目標が未計測のため、進捗率と不足額は未計測です。`,
     salesBreakdown: `売上発生人数 ${facts.sales.earnerCount}名 / 1人あたり平均 ${yen(facts.sales.averagePerEarner)} / 上位1名への集中率 ${facts.sales.topOneSharePercent ?? "算出不可"}% / 上位3名 ${facts.sales.topThreeSharePercent ?? "算出不可"}%。上位者は${facts.sales.topEarners.map((m) => `${m.name} ${yen(m.sales)}`).join("、") || "なし"}です。講師本人と研修生の売上区分は未計測です。`,
     kpi: `${Object.entries(facts.kpi).map(([k, v]) => `${k} ${v}`).join(" / ")}。投稿本数・案件提案数・商談数・成約数は未計測です。`,

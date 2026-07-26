@@ -799,14 +799,14 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
       // 8項目は source_ref に保存する（スキーマ変更を伴わない）。
       // 既存の4カラムにも要約を入れ、古い読み出し経路が壊れないようにする。
       reportRow.progress_good_text = sections
-        ? [sections.verdict, sections.verdictReason, sections.numbers].filter(Boolean).join("\n")
+        ? [sections.numbers, sections.salesBreakdown].filter(Boolean).join("\n")
         : (legacyCompany.progressReport.good || "");
       reportRow.field_issue_text = sections ? (sections.rootCause || "") : (legacyCompany.progressReport.issue || "");
       reportRow.operator_action_text = sections ? (sections.actions || "") : (legacyCompany.progressReport.action || "");
       reportRow.client_request_text = sections
         ? [sections.decisions, sections.nextReport].filter(Boolean).join("\n")
         : (legacyCompany.progressReport.request || "");
-      reportRow.executive_summary = sections ? (sections.verdict || null) : reportRow.executive_summary;
+      reportRow.executive_summary = sections ? (sections.numbers || null) : reportRow.executive_summary;
       reportRow.source_kind = "manual";
       reportRow.source_ref = { source: "frontend", actor, ...(sections ? { sections } : {}) };
       reportRow.status = "published";

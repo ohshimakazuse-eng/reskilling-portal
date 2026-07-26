@@ -1578,9 +1578,7 @@ function activeProgressReport(company) {
     : (() => {
       const legacy = { ...progressReportDefaults(company), ...stored };
       return {
-        verdict: "",
-        verdictReason: legacy.good || "",
-        numbers: "",
+        numbers: legacy.good || "",
         salesBreakdown: "",
         kpi: "",
         rootCause: legacy.issue || "",
@@ -1595,8 +1593,6 @@ function activeProgressReport(company) {
 }
 
 const REPORT_SECTIONS = [
-  ["verdict", "判定", "#reportVerdict"],
-  ["verdictReason", "判定の根拠", "#reportVerdictReason"],
   ["numbers", "数値", "#reportNumbers"],
   ["salesBreakdown", "売上内訳", "#reportSalesBreakdown"],
   ["kpi", "主要KPI", "#reportKpi"],
@@ -1656,7 +1652,6 @@ function renderExecutiveSummary() {
   $("#execStatusPill").className = `pill ${verdict.tone === "danger" ? "danger" : ""}`;
   $("#execMessage").textContent = verdict.text;
   const sectionTone = {
-    verdictReason: report.sections.verdict.includes("危険") ? "danger" : report.sections.verdict.includes("要注意") ? "warn" : "good",
     numbers: "good",
     salesBreakdown: "good",
     kpi: "good",
@@ -1665,29 +1660,16 @@ function renderExecutiveSummary() {
     decisions: "warn",
     nextReport: ""
   };
-  const verdictText = report.sections.verdict.trim();
-  $("#execInsights").innerHTML = [
-    verdictText ? `
-      <article class="insight-card verdict-card ${sectionTone.verdictReason}">
-        <strong>判定</strong>
-        <p class="verdict-value">${escapeHtml(verdictText)}</p>
-        <p>${escapeHtml(report.sections.verdictReason)}</p>
-      </article>
-    ` : "",
-    ...REPORT_SECTIONS
-      .filter(([key]) => !["verdict", "verdictReason"].includes(key))
-      .filter(([key]) => report.sections[key]?.trim())
-      .map(([key, label], index) => `
+  const filledSections = REPORT_SECTIONS.filter(([key]) => report.sections[key]?.trim());
+  $("#execInsights").innerHTML = filledSections.length
+    ? filledSections.map(([key, label], index) => `
         <article class="insight-card ${sectionTone[key] || ""}">
-          <strong>${index + 2}. ${escapeHtml(label)}</strong>
+          <strong>${index + 1}. ${escapeHtml(label)}</strong>
           <p>${escapeHtml(report.sections[key])}</p>
         </article>
-      `),
-    // 判定も本文も無い会社は、まだ生成されていないことを明示する
-    verdictText || REPORT_SECTIONS.some(([key]) => report.sections[key]?.trim())
-      ? ""
-      : `<article class="insight-card"><strong>未作成</strong><p>「AIで下書きを生成」から今月の進捗を作成してください。</p></article>`
-  ].join("");
+      `).join("")
+    // 本文が無い会社は、まだ生成されていないことを明示する
+    : `<article class="insight-card"><strong>未作成</strong><p>「AIで下書きを生成」から今月の進捗を作成してください。</p></article>`;
   $("#progressReportForm").style.display = roleCanEditProgressReport() ? "" : "none";
   const editorValues = state.progressReportDraft.companyId === company.id && state.progressReportDraft.dirty
     ? state.progressReportDraft.values
