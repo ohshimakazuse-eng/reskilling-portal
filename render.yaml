@@ -24,5 +24,8 @@ services:
       - key: OPERATOR_PASSWORD
         sync: false
       # 進捗報告のAI生成に使用。未設定でも数字ベースの下書きにフォールバックする。
-      - key: ANTHROPIC_API_KEY
+      - key: OPENAI_API_KEY
+        sync: false
+      # 使用モデル。未設定なら gpt-5.5。管理画面から利用可能なモデルIDを確認できる。
+      - key: OPENAI_MODEL
         sync: false
