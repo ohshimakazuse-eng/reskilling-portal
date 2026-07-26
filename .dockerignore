@@ -24,3 +24,4 @@ latest-sheet-reconciliation-report.md
 !server.mjs
 !normalized-store.mjs
 !supabase-store.mjs
+!progress-report-ai.mjs

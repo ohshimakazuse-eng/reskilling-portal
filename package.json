@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check app.js && node --check supabase-store.mjs && node --check normalized-store.mjs",
+    "check": "node --check server.mjs && node --check app.js && node --check supabase-store.mjs && node --check normalized-store.mjs && node --check progress-report-ai.mjs && node check-docker-context.mjs",
     "check:prod-env": "node check-production-env.mjs",
     "test:security": "node security_permission_test.mjs",
     "test:visibility": "node client_visibility_test.mjs",
     "backup": "node backup_supabase.mjs",
-    "resync:sheets": "node safe_resync_from_sheets.mjs"
+    "resync:sheets": "node safe_resync_from_sheets.mjs",
+    "check:docker": "node check-docker-context.mjs"
   },
   "engines": {
     "node": ">=20"
