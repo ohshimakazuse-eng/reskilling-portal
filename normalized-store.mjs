@@ -325,7 +325,8 @@ function replaceMemberSessions(tables, companyId, memberId, meetings) {
     session.next_action = meeting.next || null;
     session.visibility = "client";
     session.source_kind = "manual";
-    session.source_ref = { source: "frontend" };
+    // 貼り付けた議事録の全文も残す（画面には要約だけ出す）
+    session.source_ref = meeting.minutes ? { source: "frontend", minutes: meeting.minutes } : { source: "frontend" };
     session.created_by = null;
     session.updated_at = new Date().toISOString();
     session.deleted_at = null;
@@ -470,6 +471,7 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
               content: session.content,
               next: session.next_action || "",
               result: resultToLegacy[session.result] || session.result,
+              minutes: session.source_ref?.minutes || undefined,
               source: session.source_ref?.sheet || session.source_kind,
               stage: stageToLegacy[session.source_ref?.stage] || session.source_ref?.stage || stageToLegacy[member.stage]
             }));
