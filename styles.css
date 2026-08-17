@@ -3441,3 +3441,13 @@ td {
 .insight-card p {
   white-space: pre-wrap;
 }
+
+.mtg-form .minutes-field textarea {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.mtg-form .minutes-status {
+  margin: -4px 0 4px;
+  line-height: 1.6;
+}

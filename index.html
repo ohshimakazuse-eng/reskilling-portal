@@ -402,6 +402,11 @@
                   </div>
                 </div>
                 <form class="ops-form mtg-form" id="mtgOpsForm">
+                  <label class="form-field minutes-field">
+                    <span>議事録を貼り付け</span>
+                    <textarea id="mtgMinutes" rows="5" placeholder="AIが要約したMTG議事録をそのまま貼り付けてください。実施日・対象者・確認内容・次回アクションを自動で振り分けます。"></textarea>
+                  </label>
+                  <p class="subtext minutes-status" id="mtgMinutesStatus">貼り付けると自動で読み取ります。読み取り後も各欄はそのまま編集できます。</p>
                   <label class="form-field">
                     <span>対象者</span>
                     <select id="mtgMemberSelect"></select>
@@ -669,6 +674,7 @@
         </div>
       </section>
     </div>
-    <script src="./app.js?v=20260623-egress-reduction"></script>
+    <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
+    <script src="./app.js?v=20260810-mtg-minutes"></script>
   </body>
 </html>

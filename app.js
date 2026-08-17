@@ -3361,6 +3361,45 @@ function bindEvents() {
     void persistAndRefresh(member, `${company.name}: ${member.name} を追加`);
   });
 
+  const applyMinutes = () => {
+    const raw = $("#mtgMinutes")?.value || "";
+    const status = $("#mtgMinutesStatus");
+    if (!raw.trim()) {
+      if (status) status.textContent = "貼り付けると自動で読み取ります。読み取り後も各欄はそのまま編集できます。";
+      return;
+    }
+    const parsed = window.parseMeetingMinutes ? window.parseMeetingMinutes(raw) : null;
+    if (!parsed || !parsed.sectionsFound.length) {
+      if (status) status.textContent = "議事録の形式を読み取れませんでした。各欄に直接入力してください。";
+      return;
+    }
+    if (parsed.date && $("#mtgDate")) $("#mtgDate").value = parsed.date;
+    if (parsed.content && $("#mtgContent")) $("#mtgContent").value = parsed.content;
+    if (parsed.nextAction && $("#mtgNextAction")) $("#mtgNextAction").value = parsed.nextAction;
+    if (parsed.result && $("#mtgResult")) $("#mtgResult").value = parsed.result;
+
+    // 受講生名の候補（ネクストアクションの担当者→参加者の順）から対象者を選ぶ
+    const select = $("#mtgMemberSelect");
+    const names = [...(select?.options || [])].map((o) => o.value);
+    const normalize = (v) => String(v || "").replace(/[\s　]/g, "");
+    const matched = [...parsed.owners, ...parsed.participants]
+      .map((candidate) => names.find((name) => normalize(name) === normalize(candidate)
+        || normalize(name).includes(normalize(candidate))
+        || normalize(candidate).includes(normalize(name))))
+      .find(Boolean);
+    if (matched && select) {
+      select.value = matched;
+      state.mtgMemberName = matched;
+    }
+    if (status) {
+      status.textContent = `読み取りました: ${parsed.date || "実施日不明"}`
+        + `${matched ? ` / 対象者 ${matched}` : " / 対象者は手動で選んでください"}`
+        + ` / 結果 ${parsed.result}。内容を確認してから登録してください。`;
+    }
+  };
+  $("#mtgMinutes")?.addEventListener("paste", () => setTimeout(applyMinutes, 0));
+  $("#mtgMinutes")?.addEventListener("change", applyMinutes);
+
   $("#mtgOpsForm").addEventListener("submit", (event) => {
     event.preventDefault();
     if (!roleCanUseUpdateWorkspace()) return;
@@ -3375,9 +3414,12 @@ function bindEvents() {
       sale: detail.latestSales,
       content: $("#mtgContent").value,
       next: $("#mtgNextAction").value,
-      result: $("#mtgResult").value
+      result: $("#mtgResult").value,
+      minutes: ($("#mtgMinutes")?.value || "").trim() || undefined
     });
     state.mtgMemberName = member.name;
+    if ($("#mtgMinutes")) $("#mtgMinutes").value = "";
+    if ($("#mtgMinutesStatus")) $("#mtgMinutesStatus").textContent = "登録しました。次の議事録を貼り付けられます。";
     addDetailUpdate("MTG", `${member.name} のMTGを登録`, `${$("#mtgDate").value} / ${$("#mtgResult").value} / ${$("#mtgContent").value}`, member);
     // member は渡さない（更新タブで詳細オーバーレイを開かないため）。サマリで更新ログに明示する
     void persistAndRefresh(null, `${selectedCompany().name}: ${member.name} のMTGを登録`);
