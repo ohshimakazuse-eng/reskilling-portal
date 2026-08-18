@@ -2086,22 +2086,73 @@ function renderMtgOps() {
   renderMtgOpsHistory(activeMember, detail);
 }
 
+// MTG履歴の1件。タップで詳細（全文・議事録）を開閉できる。
+function meetingCardHtml(meeting, index, meta = "") {
+  const hasMinutes = Boolean(meeting.minutes && String(meeting.minutes).trim());
+  const facts = [
+    ["実施日", meeting.date],
+    ["結果", meeting.result],
+    ["記録元", meeting.coach || "スプシ記録"],
+    ["フォロワー", meeting.follower === null || meeting.follower === undefined ? "未登録" : `${Number(meeting.follower).toLocaleString("ja-JP")}人`],
+    ["売上", money(Number(meeting.sale || 0))]
+  ];
+  return `
+    <article class="meeting-card tappable" data-meeting="${index}" tabindex="0" role="button" aria-expanded="false">
+      <div class="risk-row">
+        <strong>${escapeHtml(meeting.date)}</strong>
+        <span class="pill">${escapeHtml(meeting.result)}</span>
+      </div>
+      <p class="subtext">${meta}記録元: ${escapeHtml(meeting.coach || "スプシ記録")} / 売上 ${money(Number(meeting.sale || 0))}</p>
+      <p class="meeting-summary">${escapeHtml(meeting.content)}</p>
+      <span class="meeting-toggle">タップで詳細を表示</span>
+      <div class="meeting-detail">
+        <dl class="meeting-facts">
+          ${facts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value ?? "-"))}</dd></div>`).join("")}
+        </dl>
+        <div class="meeting-block">
+          <strong>今回の確認内容</strong>
+          <p>${escapeHtml(meeting.content || "記録なし")}</p>
+        </div>
+        <div class="meeting-block">
+          <strong>次回までのアクション</strong>
+          <p>${escapeHtml(meeting.next || "未設定")}</p>
+        </div>
+        ${hasMinutes ? `
+          <div class="meeting-block">
+            <strong>議事録（貼り付け原文）</strong>
+            <p>${escapeHtml(meeting.minutes)}</p>
+          </div>
+        ` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function bindMeetingCards(containerSelector) {
+  $$(`${containerSelector} .meeting-card.tappable`).forEach((card) => {
+    const toggle = () => {
+      const open = card.classList.toggle("open");
+      card.setAttribute("aria-expanded", open ? "true" : "false");
+      const label = card.querySelector(".meeting-toggle");
+      if (label) label.textContent = open ? "タップで閉じる" : "タップで詳細を表示";
+    };
+    card.addEventListener("click", toggle);
+    card.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggle();
+    });
+  });
+}
+
 function renderMtgOpsHistory(member, detail) {
   if (!detail.meetings.length) {
     $("#mtgOpsHistory").innerHTML = `<p class="subtext">MTG・対応履歴はまだ登録されていません。</p>`;
     return;
   }
-  $("#mtgOpsHistory").innerHTML = detail.meetings.slice(0, 5).map((meeting) => `
-    <article class="meeting-card">
-      <div class="risk-row">
-        <strong>${escapeHtml(meeting.date)}</strong>
-        <span class="pill">${escapeHtml(meeting.result)}</span>
-      </div>
-      <p class="subtext">${escapeHtml(member.name)} / ${escapeHtml(meeting.coach || "スプシ記録")} / 売上 ${money(Number(meeting.sale || 0))}</p>
-      <p>${escapeHtml(meeting.content)}</p>
-      ${meeting.next ? `<p class="subtext">次回まで: ${escapeHtml(meeting.next)}</p>` : ""}
-    </article>
-  `).join("");
+  $("#mtgOpsHistory").innerHTML = detail.meetings.slice(0, 5)
+    .map((meeting, index) => meetingCardHtml(meeting, index, `${escapeHtml(member.name)} / `)).join("");
+  bindMeetingCards("#mtgOpsHistory");
 }
 
 function normalizeAccountLinks(value) {
@@ -3143,17 +3194,8 @@ function renderMeetings(meetings) {
     `;
     return;
   }
-  $("#meetingList").innerHTML = meetings.map((meeting) => `
-    <article class="meeting-card">
-      <div class="risk-row">
-        <strong>${escapeHtml(meeting.date)}</strong>
-        <span class="pill">${escapeHtml(meeting.result)}</span>
-      </div>
-      <p class="subtext">記録元: ${escapeHtml(meeting.coach || "スプシ記録")} / 売上 ${money(Number(meeting.sale || 0))}</p>
-      <p>${escapeHtml(meeting.content)}</p>
-      ${meeting.next ? `<p class="subtext">次回まで: ${escapeHtml(meeting.next)}</p>` : ""}
-    </article>
-  `).join("");
+  $("#meetingList").innerHTML = meetings.map((meeting, index) => meetingCardHtml(meeting, index)).join("");
+  bindMeetingCards("#meetingList");
 }
 
 function closeMemberDetail() {
