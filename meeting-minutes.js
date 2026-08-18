@@ -36,8 +36,16 @@
     for (const rule of SECTION_RULES) {
       if (rule.words.some((word) => normalized === word)) return rule.key;
     }
-    // 「現状の課題と改善策」のような、節をまとめた見出しは無視する（直後に個別見出しが続く）
     return null;
+  }
+
+  // 「現状の課題と改善策」のような、節をまとめただけの見出し行。
+  // 直後に個別の見出しが続くため、本文として取り込まない。
+  function isGroupHeading(line) {
+    const normalized = headingText(line).replace(/[\s　]/gu, "");
+    if (!normalized || normalized.length > 20) return false;
+    const matches = SECTION_RULES.filter((rule) => rule.words.some((word) => normalized.includes(word)));
+    return matches.length >= 2;
   }
 
   // 「サーバー / 日時 / 時間」のようにラベルだけが並ぶ行を検出する
@@ -96,6 +104,9 @@
         pendingLabels = null;
         if (values.length) continue;
       }
+
+      // まとめ見出しは本文にも節にもしない
+      if (isGroupHeading(line)) continue;
 
       const detected = detectSection(line);
       if (detected) {
@@ -159,7 +170,24 @@
     // 課題が多ければ要フォロー、決定事項があれば改善傾向、それ以外は継続
     const result = issueCount >= 3 ? "要フォロー" : hasDecision ? "改善傾向" : "継続";
 
+    // 表示用に、節ごとの箇条書きをそのまま持たせる
+    const detailSections = [
+      ["topics", "主な議題"],
+      ["status", "研修状況"],
+      ["decisions", "決定事項"],
+      ["issues", "現状の課題"],
+      ["improvements", "改善策・施策"],
+      ["nextActions", "ネクストアクション"],
+      ["consultations", "その他相談事項"],
+      ["unresolved", "未解決・確認待ち"]
+    ].map(([key, label]) => ({
+      key,
+      label,
+      items: key === "nextActions" ? nextActionItems : get(key)
+    })).filter((section) => section.items.length);
+
     return {
+      sections: detailSections,
       date: parseDate(dateSource || ""),
       companyHint: joined("company").replace(/研修$/, "").trim(),
       participants,
