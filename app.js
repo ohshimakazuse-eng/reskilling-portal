@@ -2086,9 +2086,34 @@ function renderMtgOps() {
   renderMtgOpsHistory(activeMember, detail);
 }
 
+// 保存済みの本文から、表示用の節（【見出し】＋箇条書き）を組み立てる。
+// 議事録の原文があればそこから全節を復元し、無ければ確認内容・次アクションを節に分ける。
+function meetingSections(meeting) {
+  if (meeting.minutes && window.parseMeetingMinutes) {
+    const parsed = window.parseMeetingMinutes(meeting.minutes);
+    if (parsed.sections?.length) return parsed.sections;
+  }
+  const fromText = (text, fallbackLabel) => {
+    const value = String(text || "").trim();
+    if (!value) return [];
+    if (!value.includes("【")) {
+      const items = value.split(/\r?\n/).map((line) => line.replace(/^[\s]*[・\-*•]+\s*/u, "").trim()).filter(Boolean);
+      return items.length ? [{ label: fallbackLabel, items }] : [];
+    }
+    return value.split(/【/).slice(1).map((chunk) => {
+      const [label, ...rest] = chunk.split("】");
+      const items = rest.join("】").split(/\r?\n/)
+        .map((line) => line.replace(/^[\s]*[・\-*•]+\s*/u, "").trim()).filter(Boolean);
+      return { label: label.trim(), items };
+    }).filter((section) => section.items.length);
+  };
+  return [...fromText(meeting.content, "今回の確認内容"), ...fromText(meeting.next, "次回までのアクション")];
+}
+
 // MTG履歴の1件。タップで詳細（全文・議事録）を開閉できる。
 function meetingCardHtml(meeting, index, meta = "") {
   const hasMinutes = Boolean(meeting.minutes && String(meeting.minutes).trim());
+  const sections = meetingSections(meeting);
   const facts = [
     ["実施日", meeting.date],
     ["結果", meeting.result],
@@ -2109,19 +2134,26 @@ function meetingCardHtml(meeting, index, meta = "") {
         <dl class="meeting-facts">
           ${facts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value ?? "-"))}</dd></div>`).join("")}
         </dl>
-        <div class="meeting-block">
-          <strong>今回の確認内容</strong>
-          <p>${escapeHtml(meeting.content || "記録なし")}</p>
-        </div>
-        <div class="meeting-block">
-          <strong>次回までのアクション</strong>
-          <p>${escapeHtml(meeting.next || "未設定")}</p>
-        </div>
-        ${hasMinutes ? `
-          <div class="meeting-block">
-            <strong>議事録（貼り付け原文）</strong>
-            <p>${escapeHtml(meeting.minutes)}</p>
+        ${sections.length ? `
+          <div class="meeting-sections">
+            ${sections.map((section) => `
+              <section class="meeting-section">
+                <h4>${escapeHtml(section.label)}<span>${section.items.length}件</span></h4>
+                <ul>${section.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+              </section>
+            `).join("")}
           </div>
+        ` : `
+          <div class="meeting-block">
+            <strong>今回の確認内容</strong>
+            <p>${escapeHtml(meeting.content || "記録なし")}</p>
+          </div>
+        `}
+        ${hasMinutes ? `
+          <details class="meeting-raw">
+            <summary>議事録の原文を表示</summary>
+            <p>${escapeHtml(meeting.minutes)}</p>
+          </details>
         ` : ""}
       </div>
     </article>

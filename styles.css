@@ -3606,3 +3606,65 @@ td {
     min-height: 220px;
   }
 }
+
+/* MTG詳細: bot要約と同じ節構成で、研修内容がひと目で追えるようにする */
+.meeting-sections {
+  display: grid;
+  gap: 12px;
+}
+
+.meeting-section {
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+}
+
+.meeting-section h4 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #274b8a;
+}
+
+.meeting-section h4 span {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6a7a94;
+}
+
+.meeting-section ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.meeting-section li {
+  line-height: 1.7;
+}
+
+/* 節ごとの色分けで、課題と施策を見分けやすくする */
+.meeting-section:nth-child(4) { border-left-color: #e5a33d; }
+.meeting-section:nth-child(5) { border-left-color: #3aa06a; }
+.meeting-section:nth-child(6) { border-left-color: #e5484d; }
+
+.meeting-raw {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.meeting-raw summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #6a7a94;
+}
+
+.meeting-raw p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #4a5a72;
+}
