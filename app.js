@@ -3434,11 +3434,39 @@ function bindEvents() {
       state.mtgMemberName = matched;
     }
     if (status) {
-      status.textContent = `読み取りました: ${parsed.date || "実施日不明"}`
-        + `${matched ? ` / 対象者 ${matched}` : " / 対象者は手動で選んでください"}`
-        + ` / 結果 ${parsed.result}。内容を確認してから登録してください。`;
+      status.textContent = matched
+        ? "読み取りました。右の各欄を確認・修正してから登録してください。"
+        : "読み取りました。対象者だけ手動で選んでください。";
+    }
+    // 何をどこから拾ったかを一目で確認できるようにする
+    const chips = $("#mtgMinutesChips");
+    if (chips) {
+      const labels = {
+        topics: "主な議題", status: "研修状況", issues: "現状の課題",
+        improvements: "改善策・施策", nextActions: "ネクストアクション",
+        consultations: "その他相談", unresolved: "未解決", decisions: "決定事項"
+      };
+      const found = parsed.sectionsFound.filter((key) => labels[key]).map((key) => labels[key]);
+      chips.innerHTML = [
+        `<span class="minutes-chip">${escapeHtml(parsed.date || "実施日なし")}</span>`,
+        `<span class="minutes-chip${matched ? "" : " warn"}">${escapeHtml(matched || "対象者を選択")}</span>`,
+        `<span class="minutes-chip">${escapeHtml(parsed.result)}</span>`,
+        ...found.map((label) => `<span class="minutes-chip">${escapeHtml(label)}</span>`)
+      ].join("");
     }
   };
+
+  const clearMtgForm = () => {
+    ["#mtgMinutes", "#mtgContent", "#mtgNextAction"].forEach((selector) => {
+      const field = $(selector);
+      if (field) field.value = "";
+    });
+    const chips = $("#mtgMinutesChips");
+    if (chips) chips.innerHTML = "";
+    const status = $("#mtgMinutesStatus");
+    if (status) status.textContent = "貼り付けると自動で読み取ります。読み取り後も右の各欄はそのまま編集できます。";
+  };
+  $("#mtgClear")?.addEventListener("click", clearMtgForm);
   $("#mtgMinutes")?.addEventListener("paste", () => setTimeout(applyMinutes, 0));
   $("#mtgMinutes")?.addEventListener("change", applyMinutes);
 
@@ -3461,6 +3489,7 @@ function bindEvents() {
     });
     state.mtgMemberName = member.name;
     if ($("#mtgMinutes")) $("#mtgMinutes").value = "";
+    if ($("#mtgMinutesChips")) $("#mtgMinutesChips").innerHTML = "";
     if ($("#mtgMinutesStatus")) $("#mtgMinutesStatus").textContent = "登録しました。次の議事録を貼り付けられます。";
     addDetailUpdate("MTG", `${member.name} のMTGを登録`, `${$("#mtgDate").value} / ${$("#mtgResult").value} / ${$("#mtgContent").value}`, member);
     // member は渡さない（更新タブで詳細オーバーレイを開かないため）。サマリで更新ログに明示する
