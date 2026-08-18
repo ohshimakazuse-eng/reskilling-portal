@@ -394,24 +394,43 @@
             </section>
 
             <div class="update-side">
-              <section class="panel mtg-panel">
+              <section class="panel audit-panel">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">MTG記録</p>
-                    <h2>MTG更新</h2>
+                    <p class="eyebrow">保存履歴</p>
+                    <h2>更新ログ</h2>
                   </div>
+                  <span class="pill" id="auditStatusPill">確認中</span>
                 </div>
-                <form class="ops-form mtg-form" id="mtgOpsForm">
+                <div class="audit-list" id="auditLogList"></div>
+              </section>
+            </div>
+          </div>
+
+          <section class="panel mtg-panel mtg-wide">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">MTG記録</p>
+                <h2>MTG更新</h2>
+              </div>
+              <button class="ghost-button small" id="mtgClear" type="button">入力をクリア</button>
+            </div>
+            <form class="ops-form mtg-form" id="mtgOpsForm">
+              <div class="mtg-workspace">
+                <div class="mtg-paste">
                   <label class="form-field minutes-field">
                     <span>議事録を貼り付け</span>
-                    <textarea id="mtgMinutes" rows="5" placeholder="AIが要約したMTG議事録をそのまま貼り付けてください。実施日・対象者・確認内容・次回アクションを自動で振り分けます。"></textarea>
+                    <textarea id="mtgMinutes" rows="16" placeholder="botが要約したMTG議事録をそのまま貼り付けてください。&#10;実施日・対象者・確認内容・次回アクションを自動で振り分けます。&#10;複数のメッセージに分かれている場合は、続けて貼り付けても読み取れます。"></textarea>
                   </label>
-                  <p class="subtext minutes-status" id="mtgMinutesStatus">貼り付けると自動で読み取ります。読み取り後も各欄はそのまま編集できます。</p>
-                  <label class="form-field">
-                    <span>対象者</span>
-                    <select id="mtgMemberSelect"></select>
-                  </label>
-                  <div class="form-grid compact-grid">
+                  <p class="subtext minutes-status" id="mtgMinutesStatus">貼り付けると自動で読み取ります。読み取り後も右の各欄はそのまま編集できます。</p>
+                  <div class="minutes-chips" id="mtgMinutesChips"></div>
+                </div>
+                <div class="mtg-fields">
+                  <div class="form-grid mtg-top-grid">
+                    <label class="form-field">
+                      <span>対象者</span>
+                      <select id="mtgMemberSelect"></select>
+                    </label>
                     <label class="form-field">
                       <span>実施日</span>
                       <input id="mtgDate" type="date" value="2026-06-01" />
@@ -428,29 +447,25 @@
                   </div>
                   <label class="form-field">
                     <span>今回の確認内容</span>
-                    <textarea id="mtgContent" rows="3">進捗状況と詰まりポイントを確認</textarea>
+                    <textarea id="mtgContent" rows="8">進捗状況と詰まりポイントを確認</textarea>
                   </label>
                   <label class="form-field">
                     <span>次回までのアクション</span>
-                    <textarea id="mtgNextAction" rows="3">次回までに必要項目を完了</textarea>
+                    <textarea id="mtgNextAction" rows="6">次回までに必要項目を完了</textarea>
                   </label>
                   <button class="primary-button" type="submit">MTGを登録</button>
-                </form>
-                <div class="meeting-list mtg-history" id="mtgOpsHistory"></div>
-              </section>
-
-              <section class="panel audit-panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">保存履歴</p>
-                    <h2>更新ログ</h2>
-                  </div>
-                  <span class="pill" id="auditStatusPill">確認中</span>
                 </div>
-                <div class="audit-list" id="auditLogList"></div>
-              </section>
+              </div>
+            </form>
+            <div class="panel-header compact mtg-history-header">
+              <div>
+                <p class="eyebrow">Coaching log</p>
+                <h3>この受講生のMTG履歴</h3>
+              </div>
             </div>
-          </div>
+            <div class="meeting-list mtg-history" id="mtgOpsHistory"></div>
+          </section>
+
         </section>
 
         <section class="view" id="members">

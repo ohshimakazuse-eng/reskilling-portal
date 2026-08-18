@@ -12,23 +12,44 @@
     { key: "status", words: ["研修状況"] },
     { key: "decisions", words: ["決定事項"] },
     { key: "issues", words: ["現状の課題"] },
-    { key: "improvements", words: ["改善策", "施策"] },
-    { key: "nextActions", words: ["ネクストアクション", "次のアクション"] },
-    { key: "consultations", words: ["その他相談事項", "相談事項"] },
-    { key: "unresolved", words: ["未解決", "確認待ち"] }
+    { key: "improvements", words: ["改善策・施策", "改善策", "施策"] },
+    { key: "nextActions", words: ["ネクストアクション", "次のアクション", "ネクストアクション・宿題"] },
+    { key: "consultations", words: ["その他相談事項", "相談事項", "その他"] },
+    { key: "unresolved", words: ["未解決・確認待ち", "未解決", "確認待ち"] }
   ];
 
-  // 「🗂 主な議題 — 5件」のような行から節名を判定する
+  // 見出しの装飾・件数表記を落として、見出し名だけを取り出す
+  function headingText(line) {
+    return String(line)
+      .replace(/^[^\p{L}\p{N}]+/u, "")
+      .split(/[—–]\s*\d+\s*[件名]/)[0]
+      .replace(/[\s　]+$/u, "")
+      .trim();
+  }
+
+  // 「🗂 主な議題 — 5件」のような行から節名を判定する。
+  // 見出し名と完全一致する場合だけ節とみなす（本文に「時間」等が含まれても誤判定しない）。
   function detectSection(line) {
-    const cleaned = line.replace(/^[^\p{L}\p{N}]+/u, "").trim();
-    if (!cleaned) return null;
-    // 「— 5件」「- 3件」などの件数表記を落とす
-    const head = cleaned.split(/[—–\-]\s*\d+\s*件/)[0].trim();
-    if (head.length > 24) return null;
+    const head = headingText(line);
+    if (!head || head.length > 20) return null;
+    const normalized = head.replace(/[\s　]/gu, "");
     for (const rule of SECTION_RULES) {
-      if (rule.words.some((word) => head.includes(word))) return rule.key;
+      if (rule.words.some((word) => normalized === word)) return rule.key;
     }
+    // 「現状の課題と改善策」のような、節をまとめた見出しは無視する（直後に個別見出しが続く）
     return null;
+  }
+
+  // 「サーバー / 日時 / 時間」のようにラベルだけが並ぶ行を検出する
+  function detectLabelRow(line) {
+    const parts = String(line).split(/[\t]+|[ 　]{2,}/).map((p) => headingText(p)).filter(Boolean);
+    if (parts.length < 2) return null;
+    const keys = parts.map((part) => {
+      const normalized = part.replace(/[\s　]/gu, "");
+      const rule = SECTION_RULES.find((r) => r.words.some((word) => normalized === word));
+      return rule ? rule.key : null;
+    });
+    return keys.every(Boolean) ? keys : null;
   }
 
   function stripBullet(line) {
@@ -57,14 +78,32 @@
     const lines = text.split(/\r?\n/);
     const sections = {};
     let current = null;
+    let pendingLabels = null;
     for (const line of lines) {
+      // 「発言 196件」のような集計行は本文ではない
+      if (/^[\s　]*発言[\s　]*\d+\s*件[\s　]*$/u.test(line)) continue;
+
+      // ラベルだけの行を見つけたら、次の行を値としてラベル順に割り当てる
+      const labels = detectLabelRow(line);
+      if (labels) { pendingLabels = labels; continue; }
+      if (pendingLabels) {
+        const values = String(line).split(/[\t]+|[ 　]{2,}/).map((v) => v.trim()).filter(Boolean);
+        pendingLabels.forEach((key, index) => {
+          if (!values[index]) return;
+          sections[key] = sections[key] || [];
+          sections[key].push(values[index]);
+        });
+        pendingLabels = null;
+        if (values.length) continue;
+      }
+
       const detected = detectSection(line);
       if (detected) {
         current = detected;
         sections[current] = sections[current] || [];
-        // 「日時」など、見出し行の後ろに値が続く形式にも対応する
-        const inline = line.replace(/^[^\p{L}\p{N}]+/u, "").replace(/^[^\s]*\s*/u, "").trim();
-        if (inline && !/^[—–\-]\s*\d+\s*件$/.test(inline)) sections[current].push(inline);
+        // 「日時 2026-08-18」のように見出し行の後ろに値が続く形式にも対応する
+        const inline = line.replace(/^[^\p{L}\p{N}]+/u, "").replace(/^[^\s　]*[\s　]*/u, "").trim();
+        if (inline && !/^[—–]\s*\d+\s*[件名]$/.test(inline)) sections[current].push(inline);
         continue;
       }
       if (!current) continue;
