@@ -6,7 +6,10 @@ const MONTHLY_RESET_STORAGE_KEY = "reskilling-monthly-reset-v1";
 // sync-state（軽量な更新時刻チェック）のポーリング間隔。変更時のみ全件取得する。
 const AUTO_REFRESH_INTERVAL_MS = 20000;
 const FULL_REFRESH_INTERVAL_MS = 30000;
-const NON_CLIENT_COMPANY_IDS = new Set(["nh", "vv"]);
+// クライアント表示から除外する会社（現在はなし）
+const NON_CLIENT_COMPANY_IDS = new Set();
+// 誤削除を防ぐ会社。ログインの可否とは別に、削除と同名での新規作成だけを止める。
+const PROTECTED_COMPANY_IDS = new Set(["nh", "vv"]);
 const CLIENT_LOGIN_ALIASES = {
   iberis: "イベリス",
   exceed: "エクシードキャリア",
@@ -1187,10 +1190,12 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
       saveAuthSession(payload.session);
       $("#roleSelect").value = state.role;
       $("#companySelect").value = state.companyId;
+      renderAuthShell();
+      // 会社データを取得してからビューを切り替える。
+      // data.js はブラウザへ配信しないため、取得前は会社が1件も無く画面描画が失敗する。
+      await hydratePlatformDataFromApi();
       if (!roleCanViewAll() && activeViewId() === "admin") switchView("dashboard");
       if (!roleCanEdit() && activeViewId() === "updates") switchView("dashboard");
-      renderAuthShell();
-      await hydratePlatformDataFromApi();
       renderAll();
       return true;
     } catch (error) {
@@ -1236,7 +1241,8 @@ function logoutUser() {
 }
 
 function renderShell() {
-  const company = selectedCompany();
+  // 取得前・0件でも落ちないよう、名前だけのプレースホルダを使う
+  const company = selectedCompany() || { name: "読み込み中", members: [] };
   const canViewAll = roleCanViewAll();
   const canEdit = roleCanEdit();
   const view = activeViewId();
@@ -2086,22 +2092,105 @@ function renderMtgOps() {
   renderMtgOpsHistory(activeMember, detail);
 }
 
+// 保存済みの本文から、表示用の節（【見出し】＋箇条書き）を組み立てる。
+// 議事録の原文があればそこから全節を復元し、無ければ確認内容・次アクションを節に分ける。
+function meetingSections(meeting) {
+  if (meeting.minutes && window.parseMeetingMinutes) {
+    const parsed = window.parseMeetingMinutes(meeting.minutes);
+    if (parsed.sections?.length) return parsed.sections;
+  }
+  const fromText = (text, fallbackLabel) => {
+    const value = String(text || "").trim();
+    if (!value) return [];
+    if (!value.includes("【")) {
+      const items = value.split(/\r?\n/).map((line) => line.replace(/^[\s]*[・\-*•]+\s*/u, "").trim()).filter(Boolean);
+      return items.length ? [{ label: fallbackLabel, items }] : [];
+    }
+    return value.split(/【/).slice(1).map((chunk) => {
+      const [label, ...rest] = chunk.split("】");
+      const items = rest.join("】").split(/\r?\n/)
+        .map((line) => line.replace(/^[\s]*[・\-*•]+\s*/u, "").trim()).filter(Boolean);
+      return { label: label.trim(), items };
+    }).filter((section) => section.items.length);
+  };
+  return [...fromText(meeting.content, "今回の確認内容"), ...fromText(meeting.next, "次回までのアクション")];
+}
+
+// MTG履歴の1件。タップで詳細（全文・議事録）を開閉できる。
+function meetingCardHtml(meeting, index, meta = "") {
+  const hasMinutes = Boolean(meeting.minutes && String(meeting.minutes).trim());
+  const sections = meetingSections(meeting);
+  const facts = [
+    ["実施日", meeting.date],
+    ["結果", meeting.result],
+    ["記録元", meeting.coach || "スプシ記録"],
+    ["フォロワー", meeting.follower === null || meeting.follower === undefined ? "未登録" : `${Number(meeting.follower).toLocaleString("ja-JP")}人`],
+    ["売上", money(Number(meeting.sale || 0))]
+  ];
+  return `
+    <article class="meeting-card tappable" data-meeting="${index}" tabindex="0" role="button" aria-expanded="false">
+      <div class="risk-row">
+        <strong>${escapeHtml(meeting.date)}</strong>
+        <span class="pill">${escapeHtml(meeting.result)}</span>
+      </div>
+      <p class="subtext">${meta}記録元: ${escapeHtml(meeting.coach || "スプシ記録")} / 売上 ${money(Number(meeting.sale || 0))}</p>
+      <p class="meeting-summary">${escapeHtml(meeting.content)}</p>
+      <span class="meeting-toggle">タップで詳細を表示</span>
+      <div class="meeting-detail">
+        <dl class="meeting-facts">
+          ${facts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value ?? "-"))}</dd></div>`).join("")}
+        </dl>
+        ${sections.length ? `
+          <div class="meeting-sections">
+            ${sections.map((section) => `
+              <section class="meeting-section">
+                <h4>${escapeHtml(section.label)}<span>${section.items.length}件</span></h4>
+                <ul>${section.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+              </section>
+            `).join("")}
+          </div>
+        ` : `
+          <div class="meeting-block">
+            <strong>今回の確認内容</strong>
+            <p>${escapeHtml(meeting.content || "記録なし")}</p>
+          </div>
+        `}
+        ${hasMinutes ? `
+          <details class="meeting-raw">
+            <summary>議事録の原文を表示</summary>
+            <p>${escapeHtml(meeting.minutes)}</p>
+          </details>
+        ` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function bindMeetingCards(containerSelector) {
+  $$(`${containerSelector} .meeting-card.tappable`).forEach((card) => {
+    const toggle = () => {
+      const open = card.classList.toggle("open");
+      card.setAttribute("aria-expanded", open ? "true" : "false");
+      const label = card.querySelector(".meeting-toggle");
+      if (label) label.textContent = open ? "タップで閉じる" : "タップで詳細を表示";
+    };
+    card.addEventListener("click", toggle);
+    card.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggle();
+    });
+  });
+}
+
 function renderMtgOpsHistory(member, detail) {
   if (!detail.meetings.length) {
     $("#mtgOpsHistory").innerHTML = `<p class="subtext">MTG・対応履歴はまだ登録されていません。</p>`;
     return;
   }
-  $("#mtgOpsHistory").innerHTML = detail.meetings.slice(0, 5).map((meeting) => `
-    <article class="meeting-card">
-      <div class="risk-row">
-        <strong>${escapeHtml(meeting.date)}</strong>
-        <span class="pill">${escapeHtml(meeting.result)}</span>
-      </div>
-      <p class="subtext">${escapeHtml(member.name)} / ${escapeHtml(meeting.coach || "スプシ記録")} / 売上 ${money(Number(meeting.sale || 0))}</p>
-      <p>${escapeHtml(meeting.content)}</p>
-      ${meeting.next ? `<p class="subtext">次回まで: ${escapeHtml(meeting.next)}</p>` : ""}
-    </article>
-  `).join("");
+  $("#mtgOpsHistory").innerHTML = detail.meetings.slice(0, 5)
+    .map((meeting, index) => meetingCardHtml(meeting, index, `${escapeHtml(member.name)} / `)).join("");
+  bindMeetingCards("#mtgOpsHistory");
 }
 
 function normalizeAccountLinks(value) {
@@ -2265,6 +2354,16 @@ function progressLabel(value) {
   return "未着手";
 }
 
+// 既存の別名表は「ログインID → 会社ID」なので、表示用に逆引きする
+function clientLoginIdFor(companyId) {
+  const alias = Object.entries(CLIENT_LOGIN_ALIASES).find(([, id]) => id === companyId);
+  return alias ? alias[0] : String(companyId || "");
+}
+
+function clientPasswordFor(companyId) {
+  return `${clientLoginIdFor(companyId)}123`;
+}
+
 function renderCompanyGrid() {
   const list = [...companies()].sort((a, b) => currentEnrollment(b) - currentEnrollment(a));
   const maxSales = Math.max(...list.map((company) => Number(company.sales || 0)), 1);
@@ -2276,7 +2375,7 @@ function renderCompanyGrid() {
     const risk = riskCount(company);
     const riskRate = Math.round((risk / Math.max(1, company.members.length)) * 100);
     const sales = Number(company.sales || 0);
-    const canDelete = canManage && !NON_CLIENT_COMPANY_IDS.has(company.id);
+    const canDelete = canManage && !PROTECTED_COMPANY_IDS.has(company.id);
     return `
       <div class="company-card-wrap">
       ${canDelete ? `<button class="company-delete-button" data-delete-company="${company.id}" type="button" title="このマイページを削除" aria-label="${company.name} のマイページを削除">×</button>` : ""}
@@ -2306,6 +2405,12 @@ function renderCompanyGrid() {
         </div>
         <p class="subtext">要確認率 ${riskRate}% / クリックで会社ページへ</p>
       </button>
+      ${canManage ? `
+        <div class="company-login">
+          <span>クライアント用ログイン</span>
+          <code>ID ${escapeHtml(clientLoginIdFor(company.id))} / PW ${escapeHtml(clientPasswordFor(company.id))}</code>
+        </div>
+      ` : ""}
       </div>
     `;
   }).join("");
@@ -2581,7 +2686,7 @@ function addCompanyFromForm() {
   const code = normalizeCompanyCode($("#newCompanyCode").value);
   const enrollment = Number($("#newCompanyEnrollment").value || 0);
   if (!name || !code) return;
-  if (NON_CLIENT_COMPANY_IDS.has(code)) {
+  if (PROTECTED_COMPANY_IDS.has(code)) {
     window.alert("このIDは社内管理会社用のため使用できません。");
     return;
   }
@@ -2606,7 +2711,7 @@ async function deleteCompany(companyId) {
   if (!roleCanManageCompanies()) return;
   const company = companyData.find((item) => item.id === companyId);
   if (!company) return;
-  if (NON_CLIENT_COMPANY_IDS.has(company.id)) {
+  if (PROTECTED_COMPANY_IDS.has(company.id)) {
     window.alert("社内管理用の会社のため削除できません。");
     return;
   }
@@ -3143,17 +3248,8 @@ function renderMeetings(meetings) {
     `;
     return;
   }
-  $("#meetingList").innerHTML = meetings.map((meeting) => `
-    <article class="meeting-card">
-      <div class="risk-row">
-        <strong>${escapeHtml(meeting.date)}</strong>
-        <span class="pill">${escapeHtml(meeting.result)}</span>
-      </div>
-      <p class="subtext">記録元: ${escapeHtml(meeting.coach || "スプシ記録")} / 売上 ${money(Number(meeting.sale || 0))}</p>
-      <p>${escapeHtml(meeting.content)}</p>
-      ${meeting.next ? `<p class="subtext">次回まで: ${escapeHtml(meeting.next)}</p>` : ""}
-    </article>
-  `).join("");
+  $("#meetingList").innerHTML = meetings.map((meeting, index) => meetingCardHtml(meeting, index)).join("");
+  bindMeetingCards("#meetingList");
 }
 
 function closeMemberDetail() {
@@ -3361,6 +3457,73 @@ function bindEvents() {
     void persistAndRefresh(member, `${company.name}: ${member.name} を追加`);
   });
 
+  const applyMinutes = () => {
+    const raw = $("#mtgMinutes")?.value || "";
+    const status = $("#mtgMinutesStatus");
+    if (!raw.trim()) {
+      if (status) status.textContent = "貼り付けると自動で読み取ります。読み取り後も各欄はそのまま編集できます。";
+      return;
+    }
+    const parsed = window.parseMeetingMinutes ? window.parseMeetingMinutes(raw) : null;
+    if (!parsed || !parsed.sectionsFound.length) {
+      if (status) status.textContent = "議事録の形式を読み取れませんでした。各欄に直接入力してください。";
+      return;
+    }
+    if (parsed.date && $("#mtgDate")) $("#mtgDate").value = parsed.date;
+    if (parsed.content && $("#mtgContent")) $("#mtgContent").value = parsed.content;
+    if (parsed.nextAction && $("#mtgNextAction")) $("#mtgNextAction").value = parsed.nextAction;
+    if (parsed.result && $("#mtgResult")) $("#mtgResult").value = parsed.result;
+
+    // 受講生名の候補（ネクストアクションの担当者→参加者の順）から対象者を選ぶ
+    const select = $("#mtgMemberSelect");
+    const names = [...(select?.options || [])].map((o) => o.value);
+    const normalize = (v) => String(v || "").replace(/[\s　]/g, "");
+    const matched = [...parsed.owners, ...parsed.participants]
+      .map((candidate) => names.find((name) => normalize(name) === normalize(candidate)
+        || normalize(name).includes(normalize(candidate))
+        || normalize(candidate).includes(normalize(name))))
+      .find(Boolean);
+    if (matched && select) {
+      select.value = matched;
+      state.mtgMemberName = matched;
+    }
+    if (status) {
+      status.textContent = matched
+        ? "読み取りました。右の各欄を確認・修正してから登録してください。"
+        : "読み取りました。対象者だけ手動で選んでください。";
+    }
+    // 何をどこから拾ったかを一目で確認できるようにする
+    const chips = $("#mtgMinutesChips");
+    if (chips) {
+      const labels = {
+        topics: "主な議題", status: "研修状況", issues: "現状の課題",
+        improvements: "改善策・施策", nextActions: "ネクストアクション",
+        consultations: "その他相談", unresolved: "未解決", decisions: "決定事項"
+      };
+      const found = parsed.sectionsFound.filter((key) => labels[key]).map((key) => labels[key]);
+      chips.innerHTML = [
+        `<span class="minutes-chip">${escapeHtml(parsed.date || "実施日なし")}</span>`,
+        `<span class="minutes-chip${matched ? "" : " warn"}">${escapeHtml(matched || "対象者を選択")}</span>`,
+        `<span class="minutes-chip">${escapeHtml(parsed.result)}</span>`,
+        ...found.map((label) => `<span class="minutes-chip">${escapeHtml(label)}</span>`)
+      ].join("");
+    }
+  };
+
+  const clearMtgForm = () => {
+    ["#mtgMinutes", "#mtgContent", "#mtgNextAction"].forEach((selector) => {
+      const field = $(selector);
+      if (field) field.value = "";
+    });
+    const chips = $("#mtgMinutesChips");
+    if (chips) chips.innerHTML = "";
+    const status = $("#mtgMinutesStatus");
+    if (status) status.textContent = "貼り付けると自動で読み取ります。読み取り後も右の各欄はそのまま編集できます。";
+  };
+  $("#mtgClear")?.addEventListener("click", clearMtgForm);
+  $("#mtgMinutes")?.addEventListener("paste", () => setTimeout(applyMinutes, 0));
+  $("#mtgMinutes")?.addEventListener("change", applyMinutes);
+
   $("#mtgOpsForm").addEventListener("submit", (event) => {
     event.preventDefault();
     if (!roleCanUseUpdateWorkspace()) return;
@@ -3375,9 +3538,13 @@ function bindEvents() {
       sale: detail.latestSales,
       content: $("#mtgContent").value,
       next: $("#mtgNextAction").value,
-      result: $("#mtgResult").value
+      result: $("#mtgResult").value,
+      minutes: ($("#mtgMinutes")?.value || "").trim() || undefined
     });
     state.mtgMemberName = member.name;
+    if ($("#mtgMinutes")) $("#mtgMinutes").value = "";
+    if ($("#mtgMinutesChips")) $("#mtgMinutesChips").innerHTML = "";
+    if ($("#mtgMinutesStatus")) $("#mtgMinutesStatus").textContent = "登録しました。次の議事録を貼り付けられます。";
     addDetailUpdate("MTG", `${member.name} のMTGを登録`, `${$("#mtgDate").value} / ${$("#mtgResult").value} / ${$("#mtgContent").value}`, member);
     // member は渡さない（更新タブで詳細オーバーレイを開かないため）。サマリで更新ログに明示する
     void persistAndRefresh(null, `${selectedCompany().name}: ${member.name} のMTGを登録`);

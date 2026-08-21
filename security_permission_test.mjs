@@ -72,12 +72,22 @@ async function main() {
   const clientOtherDashboard = await request("/api/v2/companies/ba/dashboard", { headers: auth(client) });
   assert(clientOtherDashboard.status === 403, `client other dashboard must be 403, got ${clientOtherDashboard.status}`);
 
-  const clientInternalLogin = await request("/api/login", {
+  // NH/VV もクライアント用ログインを発行済み。ログインは通り、権限は他社と同じであること。
+  const nhLogin = await request("/api/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ loginId: "nh", password: "nh123" })
   });
-  assert(clientInternalLogin.status === 401 || clientInternalLogin.status === 403, `internal client login must fail, got ${clientInternalLogin.status}`);
+  assert(nhLogin.status === 200, `nh client login must succeed, got ${nhLogin.status}`);
+  assert(nhLogin.body?.session?.permissions?.canViewAll === false, "nh client must not view all companies");
+  assert(nhLogin.body?.session?.companyId === "nh", `nh client must be scoped to nh, got ${nhLogin.body?.session?.companyId}`);
+
+  const nhWrongPassword = await request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ loginId: "nh", password: "wrong" })
+  });
+  assert(nhWrongPassword.status === 401, `nh wrong password must be 401, got ${nhWrongPassword.status}`);
 
   const noAuthCompanies = await request("/api/companies");
   assert(noAuthCompanies.status === 401, `no-auth companies must be 401, got ${noAuthCompanies.status}`);
@@ -96,7 +106,8 @@ async function main() {
       "client_single_company_access",
       "client_write_denied",
       "client_other_company_denied",
-      "internal_company_client_login_denied",
+      "internal_company_client_login_allowed",
+      "internal_company_wrong_password_denied",
       "no_auth_denied",
       "admin_cross_company_allowed"
     ]
