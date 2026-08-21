@@ -50,7 +50,8 @@ let bundledDataSyncStatus = {
   message: "未実行",
   result: null
 };
-const nonClientCompanyIds = new Set(["nh", "vv"]);
+// クライアントとしてログインさせない会社。現在は全社にクライアント用ログインを発行している。
+const nonClientCompanyIds = new Set();
 // 画面表示・保存マージに不要な重いテーブル（監査ログ等）はSupabaseから読み込まない
 const heavyReadExcludedTables = ["app_users", "company_users", "update_batches", "audit_logs"];
 const isProduction = process.env.NODE_ENV === "production";

@@ -3668,3 +3668,25 @@ td {
   line-height: 1.7;
   color: #4a5a72;
 }
+
+/* クライアント配布用のログイン情報（管理者のみ表示） */
+.company-login {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f2f6fd;
+  display: grid;
+  gap: 3px;
+}
+
+.company-login span {
+  font-size: 11px;
+  color: #6a7a94;
+}
+
+.company-login code {
+  font-size: 12px;
+  font-weight: 600;
+  color: #274b8a;
+  word-break: break-all;
+}

@@ -6,7 +6,10 @@ const MONTHLY_RESET_STORAGE_KEY = "reskilling-monthly-reset-v1";
 // sync-state（軽量な更新時刻チェック）のポーリング間隔。変更時のみ全件取得する。
 const AUTO_REFRESH_INTERVAL_MS = 20000;
 const FULL_REFRESH_INTERVAL_MS = 30000;
-const NON_CLIENT_COMPANY_IDS = new Set(["nh", "vv"]);
+// クライアント表示から除外する会社（現在はなし）
+const NON_CLIENT_COMPANY_IDS = new Set();
+// 誤削除を防ぐ会社。ログインの可否とは別に、削除と同名での新規作成だけを止める。
+const PROTECTED_COMPANY_IDS = new Set(["nh", "vv"]);
 const CLIENT_LOGIN_ALIASES = {
   iberis: "イベリス",
   exceed: "エクシードキャリア",
@@ -1187,10 +1190,12 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
       saveAuthSession(payload.session);
       $("#roleSelect").value = state.role;
       $("#companySelect").value = state.companyId;
+      renderAuthShell();
+      // 会社データを取得してからビューを切り替える。
+      // data.js はブラウザへ配信しないため、取得前は会社が1件も無く画面描画が失敗する。
+      await hydratePlatformDataFromApi();
       if (!roleCanViewAll() && activeViewId() === "admin") switchView("dashboard");
       if (!roleCanEdit() && activeViewId() === "updates") switchView("dashboard");
-      renderAuthShell();
-      await hydratePlatformDataFromApi();
       renderAll();
       return true;
     } catch (error) {
@@ -1236,7 +1241,8 @@ function logoutUser() {
 }
 
 function renderShell() {
-  const company = selectedCompany();
+  // 取得前・0件でも落ちないよう、名前だけのプレースホルダを使う
+  const company = selectedCompany() || { name: "読み込み中", members: [] };
   const canViewAll = roleCanViewAll();
   const canEdit = roleCanEdit();
   const view = activeViewId();
@@ -2348,6 +2354,16 @@ function progressLabel(value) {
   return "未着手";
 }
 
+// 既存の別名表は「ログインID → 会社ID」なので、表示用に逆引きする
+function clientLoginIdFor(companyId) {
+  const alias = Object.entries(CLIENT_LOGIN_ALIASES).find(([, id]) => id === companyId);
+  return alias ? alias[0] : String(companyId || "");
+}
+
+function clientPasswordFor(companyId) {
+  return `${clientLoginIdFor(companyId)}123`;
+}
+
 function renderCompanyGrid() {
   const list = [...companies()].sort((a, b) => currentEnrollment(b) - currentEnrollment(a));
   const maxSales = Math.max(...list.map((company) => Number(company.sales || 0)), 1);
@@ -2359,7 +2375,7 @@ function renderCompanyGrid() {
     const risk = riskCount(company);
     const riskRate = Math.round((risk / Math.max(1, company.members.length)) * 100);
     const sales = Number(company.sales || 0);
-    const canDelete = canManage && !NON_CLIENT_COMPANY_IDS.has(company.id);
+    const canDelete = canManage && !PROTECTED_COMPANY_IDS.has(company.id);
     return `
       <div class="company-card-wrap">
       ${canDelete ? `<button class="company-delete-button" data-delete-company="${company.id}" type="button" title="このマイページを削除" aria-label="${company.name} のマイページを削除">×</button>` : ""}
@@ -2389,6 +2405,12 @@ function renderCompanyGrid() {
         </div>
         <p class="subtext">要確認率 ${riskRate}% / クリックで会社ページへ</p>
       </button>
+      ${canManage ? `
+        <div class="company-login">
+          <span>クライアント用ログイン</span>
+          <code>ID ${escapeHtml(clientLoginIdFor(company.id))} / PW ${escapeHtml(clientPasswordFor(company.id))}</code>
+        </div>
+      ` : ""}
       </div>
     `;
   }).join("");
@@ -2664,7 +2686,7 @@ function addCompanyFromForm() {
   const code = normalizeCompanyCode($("#newCompanyCode").value);
   const enrollment = Number($("#newCompanyEnrollment").value || 0);
   if (!name || !code) return;
-  if (NON_CLIENT_COMPANY_IDS.has(code)) {
+  if (PROTECTED_COMPANY_IDS.has(code)) {
     window.alert("このIDは社内管理会社用のため使用できません。");
     return;
   }
@@ -2689,7 +2711,7 @@ async function deleteCompany(companyId) {
   if (!roleCanManageCompanies()) return;
   const company = companyData.find((item) => item.id === companyId);
   if (!company) return;
-  if (NON_CLIENT_COMPANY_IDS.has(company.id)) {
+  if (PROTECTED_COMPANY_IDS.has(company.id)) {
     window.alert("社内管理用の会社のため削除できません。");
     return;
   }
