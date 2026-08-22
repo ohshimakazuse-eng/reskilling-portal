@@ -3690,3 +3690,23 @@ td {
   color: #274b8a;
   word-break: break-all;
 }
+
+/* MTG履歴の編集・削除 */
+.meeting-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.meeting-actions button {
+  padding: 3px 12px;
+  font-size: 12px;
+}
+
+/* 編集中はフォームを目立たせ、新規登録と取り違えないようにする */
+.mtg-panel.mtg-wide.editing .mtg-form {
+  background: #fff7ec;
+  border: 1px solid #f0c98a;
+  border-radius: 10px;
+  padding: 12px;
+}

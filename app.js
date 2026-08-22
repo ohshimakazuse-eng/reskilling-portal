@@ -797,6 +797,7 @@ const state = {
   companySort: { key: "enrollment", direction: "desc" },
   activeMemberName: "",
   mtgMemberName: "",
+  mtgEditing: null,
   platformUpdatedAt: "",
   lastHydratedAt: "",
   lastFullRefreshAt: 0,
@@ -1233,7 +1234,8 @@ function logoutUser() {
   renderAuthShell();
   companyData = cloneData(importedCompanyData);
   mergeImportedAccountLinks();
-  state.companyId = companies()[0].id;
+  // data.js はブラウザへ配信しないため、ログアウト直後は会社が0件になりうる
+  state.companyId = companies()[0]?.id || "";
   renderCompanySelect();
   renderLoginCompanies();
   // 次回ログイン時に管理ビューから始まるよう内部状態だけリセット（通信はしない）
@@ -2117,7 +2119,7 @@ function meetingSections(meeting) {
 }
 
 // MTG履歴の1件。タップで詳細（全文・議事録）を開閉できる。
-function meetingCardHtml(meeting, index, meta = "") {
+function meetingCardHtml(meeting, index, meta = "", editable = false) {
   const hasMinutes = Boolean(meeting.minutes && String(meeting.minutes).trim());
   const sections = meetingSections(meeting);
   const facts = [
@@ -2136,6 +2138,12 @@ function meetingCardHtml(meeting, index, meta = "") {
       <p class="subtext">${meta}記録元: ${escapeHtml(meeting.coach || "スプシ記録")} / 売上 ${money(Number(meeting.sale || 0))}</p>
       <p class="meeting-summary">${escapeHtml(meeting.content)}</p>
       <span class="meeting-toggle">タップで詳細を表示</span>
+      ${editable ? `
+        <div class="meeting-actions">
+          <button class="ghost-button small" data-edit-meeting="${index}" type="button">編集</button>
+          <button class="danger-button small" data-delete-meeting="${index}" type="button">削除</button>
+        </div>
+      ` : ""}
       <div class="meeting-detail">
         <dl class="meeting-facts">
           ${facts.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value ?? "-"))}</dd></div>`).join("")}
@@ -2166,6 +2174,84 @@ function meetingCardHtml(meeting, index, meta = "") {
   `;
 }
 
+// 履歴カードの編集・削除。カードの開閉と競合しないよう伝播を止める。
+function bindMeetingActions(containerSelector, member) {
+  $$(`${containerSelector} [data-edit-meeting]`).forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      startEditMeeting(member, Number(button.dataset.editMeeting));
+    });
+  });
+  $$(`${containerSelector} [data-delete-meeting]`).forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void deleteMeeting(member, Number(button.dataset.deleteMeeting));
+    });
+  });
+}
+
+// 既存の記録をフォームへ戻し、次回の保存で上書きする
+function startEditMeeting(member, index) {
+  const meeting = (member.meetings || [])[index];
+  if (!meeting) return;
+  state.mtgEditing = { memberName: member.name, index };
+  state.mtgMemberName = member.name;
+  const set = (selector, value) => { const field = $(selector); if (field) field.value = value ?? ""; };
+  set("#mtgMemberSelect", member.name);
+  set("#mtgDate", String(meeting.date || "").replaceAll("/", "-"));
+  set("#mtgResult", meeting.result || "継続");
+  set("#mtgContent", meeting.content || "");
+  set("#mtgNextAction", meeting.next || "");
+  set("#mtgMinutes", meeting.minutes || "");
+  const chips = $("#mtgMinutesChips");
+  if (chips) chips.innerHTML = "";
+  renderMtgEditingState();
+  $("#mtgOpsForm")?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function cancelEditMeeting() {
+  state.mtgEditing = null;
+  ["#mtgMinutes", "#mtgContent", "#mtgNextAction"].forEach((selector) => {
+    const field = $(selector);
+    if (field) field.value = "";
+  });
+  const chips = $("#mtgMinutesChips");
+  if (chips) chips.innerHTML = "";
+  renderMtgEditingState();
+}
+
+function renderMtgEditingState() {
+  const editing = Boolean(state.mtgEditing);
+  const submit = $("#mtgOpsForm button[type='submit']");
+  if (submit) submit.textContent = editing ? "この内容で更新" : "MTGを登録";
+  const cancel = $("#mtgCancelEdit");
+  if (cancel) cancel.style.display = editing ? "" : "none";
+  const status = $("#mtgMinutesStatus");
+  if (editing && status) {
+    status.textContent = `${state.mtgEditing.memberName} の既存のMTGを編集しています。保存すると上書きされます。`;
+  }
+  const panel = $(".mtg-panel.mtg-wide");
+  if (panel) panel.classList.toggle("editing", editing);
+}
+
+async function deleteMeeting(member, index) {
+  if (!roleCanUseUpdateWorkspace()) return;
+  const meeting = (member.meetings || [])[index];
+  if (!meeting) return;
+  if (!window.confirm(`${member.name} の ${meeting.date} のMTG記録を削除します。元に戻せません。よろしいですか？`)) return;
+  const before = [...member.meetings];
+  member.meetings.splice(index, 1);
+  // 編集中の記録を消したら編集モードも解除する
+  if (state.mtgEditing?.memberName === member.name && state.mtgEditing.index === index) cancelEditMeeting();
+  const saved = await persistAndRefresh(null, `${selectedCompany().name}: ${member.name} のMTGを削除`);
+  if (!saved) {
+    member.meetings = before;
+    renderAll();
+    return;
+  }
+  addDetailUpdate("MTG", `${member.name} のMTGを削除`, `${meeting.date} の記録を削除`, member);
+}
+
 function bindMeetingCards(containerSelector) {
   $$(`${containerSelector} .meeting-card.tappable`).forEach((card) => {
     const toggle = () => {
@@ -2188,9 +2274,11 @@ function renderMtgOpsHistory(member, detail) {
     $("#mtgOpsHistory").innerHTML = `<p class="subtext">MTG・対応履歴はまだ登録されていません。</p>`;
     return;
   }
+  const editable = roleCanUseUpdateWorkspace();
   $("#mtgOpsHistory").innerHTML = detail.meetings.slice(0, 5)
-    .map((meeting, index) => meetingCardHtml(meeting, index, `${escapeHtml(member.name)} / `)).join("");
+    .map((meeting, index) => meetingCardHtml(meeting, index, `${escapeHtml(member.name)} / `, editable)).join("");
   bindMeetingCards("#mtgOpsHistory");
+  if (editable) bindMeetingActions("#mtgOpsHistory", member);
 }
 
 function normalizeAccountLinks(value) {
@@ -3521,6 +3609,7 @@ function bindEvents() {
     if (status) status.textContent = "貼り付けると自動で読み取ります。読み取り後も右の各欄はそのまま編集できます。";
   };
   $("#mtgClear")?.addEventListener("click", clearMtgForm);
+  $("#mtgCancelEdit")?.addEventListener("click", cancelEditMeeting);
   $("#mtgMinutes")?.addEventListener("paste", () => setTimeout(applyMinutes, 0));
   $("#mtgMinutes")?.addEventListener("change", applyMinutes);
 
@@ -3531,23 +3620,35 @@ function bindEvents() {
     if (!member) return;
     const detail = memberDetail(member);
     member.meetings = member.meetings || [];
-    member.meetings.unshift({
+    const editing = state.mtgEditing;
+    const existing = editing && editing.memberName === member.name ? member.meetings[editing.index] : null;
+    const record = {
       date: $("#mtgDate").value.replaceAll("-", "/"),
-      coach: "運用者",
-      follower: detail.latestFollower,
-      sale: detail.latestSales,
+      // 編集時は元の記録元・数字を引き継ぎ、当時の値を書き換えない
+      coach: existing?.coach || "運用者",
+      follower: existing ? existing.follower : detail.latestFollower,
+      sale: existing ? existing.sale : detail.latestSales,
       content: $("#mtgContent").value,
       next: $("#mtgNextAction").value,
       result: $("#mtgResult").value,
       minutes: ($("#mtgMinutes")?.value || "").trim() || undefined
-    });
+    };
+    if (existing) {
+      member.meetings[editing.index] = record;
+    } else {
+      member.meetings.unshift(record);
+    }
+    state.mtgEditing = null;
+    renderMtgEditingState();
     state.mtgMemberName = member.name;
     if ($("#mtgMinutes")) $("#mtgMinutes").value = "";
     if ($("#mtgMinutesChips")) $("#mtgMinutesChips").innerHTML = "";
-    if ($("#mtgMinutesStatus")) $("#mtgMinutesStatus").textContent = "登録しました。次の議事録を貼り付けられます。";
-    addDetailUpdate("MTG", `${member.name} のMTGを登録`, `${$("#mtgDate").value} / ${$("#mtgResult").value} / ${$("#mtgContent").value}`, member);
+    if ($("#mtgMinutesStatus")) $("#mtgMinutesStatus").textContent = existing
+      ? "更新しました。"
+      : "登録しました。次の議事録を貼り付けられます。";
+    addDetailUpdate("MTG", `${member.name} のMTGを${existing ? "更新" : "登録"}`, `${$("#mtgDate").value} / ${$("#mtgResult").value} / ${$("#mtgContent").value}`, member);
     // member は渡さない（更新タブで詳細オーバーレイを開かないため）。サマリで更新ログに明示する
-    void persistAndRefresh(null, `${selectedCompany().name}: ${member.name} のMTGを登録`);
+    void persistAndRefresh(null, `${selectedCompany().name}: ${member.name} のMTGを${existing ? "更新" : "登録"}`);
   });
 
   $("#detailMeetingForm").addEventListener("submit", (event) => {
