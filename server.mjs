@@ -33,6 +33,10 @@ import {
   readSupabaseSyncState,
   writeSupabaseNormalizedDb
 } from "./supabase-store.mjs";
+// グローバルへ公開する共有スクリプト。ブラウザ側(app.js)と同じ判定を使うためNodeでも読み込む。
+import "./client-login.js";
+
+const { findCompanyByLoginId, clientLoginFor } = globalThis;
 
 const root = resolve(".");
 const dbDir = join(root, "db");
@@ -61,12 +65,6 @@ const adminPassword = process.env.ADMIN_PASSWORD || (isProduction ? "" : devAdmi
 const operatorPassword = process.env.OPERATOR_PASSWORD || (isProduction ? "" : devOperatorPassword);
 const sessionSecret = process.env.SESSION_SECRET || adminPassword || operatorPassword || "reskilling-portal-local-session";
 const sessionTtlMs = 1000 * 60 * 60 * 24 * 30;
-const clientLoginAliases = {
-  iberis: "イベリス",
-  exceed: "エクシードキャリア",
-  recrea: "レクレア",
-  rower: "ローワー"
-};
 const defaultMonths = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 
 const demoUsers = {
@@ -264,11 +262,10 @@ function resolveLogin(body, companies) {
     return demoUser.password && body.password === demoUser.password ? { user: demoUser, company: companies.find((item) => item.id === body.companyId) || companies[0] } : null;
   }
 
-  const companyId = clientLoginAliases[loginId] || (/^[a-z0-9_-]+$/.test(loginId) ? loginId : "");
-  const company = companies.find((item) => item.id.toLowerCase() === companyId);
+  // 会社コードが日本語などIDに使えない場合も、画面に表示しているIDでログインできるようにする
+  const company = findCompanyByLoginId(companies, loginId);
   if (!company || nonClientCompanyIds.has(company.id)) return null;
-  const expectedPassword = `${loginId}123`;
-  if (body.password !== expectedPassword) return null;
+  if (body.password !== clientLoginFor(companies, company.id).password) return null;
   return {
     user: { role: "client", name: "クライアント閲覧者", canViewAll: false, canEdit: false },
     company
