@@ -8,7 +8,7 @@ ENV APP_BUILD_MARKER=2026-06-03-companies-auth-route
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY index.html app.js styles.css server.mjs data.js ./
+COPY index.html app.js meeting-minutes.js styles.css server.mjs data.js ./
 COPY normalized-store.mjs supabase-store.mjs progress-report-ai.mjs ./
 COPY enrollment-history.json ./
 COPY assets ./assets
