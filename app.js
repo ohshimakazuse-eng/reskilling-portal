@@ -10,12 +10,7 @@ const FULL_REFRESH_INTERVAL_MS = 30000;
 const NON_CLIENT_COMPANY_IDS = new Set();
 // 誤削除を防ぐ会社。ログインの可否とは別に、削除と同名での新規作成だけを止める。
 const PROTECTED_COMPANY_IDS = new Set(["nh", "vv"]);
-const CLIENT_LOGIN_ALIASES = {
-  iberis: "イベリス",
-  exceed: "エクシードキャリア",
-  recrea: "レクレア",
-  rower: "ローワー"
-};
+// ログインIDの決定は client-login.js（サーバーと共有）に集約している
 const PRODUCTION_URL = "https://reskilling-portal.onrender.com";
 const importedCompanyData = window.RESKILLING_DATA?.companies || fallbackCompanyData;
 let months = window.RESKILLING_DATA?.months || ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
@@ -1206,10 +1201,9 @@ async function loginWithApiOrLocal(role, companyId, email, password) {
   }
 
   if (!apiAvailable()) return false;
-  const normalizedLoginId = email.toLowerCase();
-  const clientCompanyId = CLIENT_LOGIN_ALIASES[normalizedLoginId] || (/^[a-z0-9_-]+$/.test(normalizedLoginId) ? normalizedLoginId : "");
-  const clientCompany = companies().find((company) => company.id === clientCompanyId && !NON_CLIENT_COMPANY_IDS.has(company.id));
-  if (clientCompany && password === `${normalizedLoginId}123`) {
+  const found = window.findCompanyByLoginId(companies(), email);
+  const clientCompany = found && !NON_CLIENT_COMPANY_IDS.has(found.id) ? found : null;
+  if (clientCompany && password === clientPasswordFor(clientCompany.id)) {
     loginUser("client", clientCompany.id);
     return true;
   }
@@ -2442,14 +2436,17 @@ function progressLabel(value) {
   return "未着手";
 }
 
-// 既存の別名表は「ログインID → 会社ID」なので、表示用に逆引きする
+// サーバーのログイン判定と同じ関数を使う。表示したIDが必ずそのまま使える。
+function clientLoginInfoFor(companyId) {
+  return window.clientLoginFor(companies(), companyId);
+}
+
 function clientLoginIdFor(companyId) {
-  const alias = Object.entries(CLIENT_LOGIN_ALIASES).find(([, id]) => id === companyId);
-  return alias ? alias[0] : String(companyId || "");
+  return clientLoginInfoFor(companyId).loginId;
 }
 
 function clientPasswordFor(companyId) {
-  return `${clientLoginIdFor(companyId)}123`;
+  return clientLoginInfoFor(companyId).password;
 }
 
 function renderCompanyGrid() {
@@ -2464,6 +2461,7 @@ function renderCompanyGrid() {
     const riskRate = Math.round((risk / Math.max(1, company.members.length)) * 100);
     const sales = Number(company.sales || 0);
     const canDelete = canManage && !PROTECTED_COMPANY_IDS.has(company.id);
+    const login = clientLoginInfoFor(company.id);
     return `
       <div class="company-card-wrap">
       ${canDelete ? `<button class="company-delete-button" data-delete-company="${company.id}" type="button" title="このマイページを削除" aria-label="${company.name} のマイページを削除">×</button>` : ""}
@@ -2495,8 +2493,9 @@ function renderCompanyGrid() {
       </button>
       ${canManage ? `
         <div class="company-login">
-          <span>クライアント用ログイン</span>
-          <code>ID ${escapeHtml(clientLoginIdFor(company.id))} / PW ${escapeHtml(clientPasswordFor(company.id))}</code>
+          <span>クライアント用ログイン${login.auto ? `<em class="login-auto-tag">自動発行</em>` : ""}</span>
+          <code>ID ${escapeHtml(login.loginId)} / PW ${escapeHtml(login.password)}</code>
+          <button class="ghost-button small" data-copy-login="${escapeHtml(company.id)}" type="button">コピー</button>
         </div>
       ` : ""}
       </div>
@@ -2517,6 +2516,25 @@ function renderCompanyGrid() {
       event.stopPropagation();
       event.preventDefault();
       void deleteCompany(button.dataset.deleteCompany);
+    });
+  });
+
+  $$("[data-copy-login]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      const company = companies().find((item) => String(item.id) === button.dataset.copyLogin);
+      if (!company) return;
+      const info = clientLoginInfoFor(company.id);
+      const text = `${company.name}\nログインURL ${PRODUCTION_URL}\nID ${info.loginId}\nパスワード ${info.password}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        const original = button.textContent;
+        button.textContent = "コピー済み";
+        window.setTimeout(() => { button.textContent = original; }, 1600);
+      } catch {
+        window.prompt("コピーしてお使いください", text.replace(/\n/g, " / "));
+      }
     });
   });
 }
