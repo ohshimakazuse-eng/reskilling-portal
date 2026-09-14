@@ -667,8 +667,12 @@ function resetMemberForMonth(member, monthKey) {
   const detail = memberDetail(member);
   member.followerHistory = ensureHistoryLength(detail.followers, null);
   member.salesHistory = ensureHistoryLength(detail.sales, null);
-  // 当月の売上だけ0開始にし、前月までの実績はそのまま残す
+  member.ttoSalesHistory = ensureHistoryLength(detail.ttoSales, null);
+  member.ttsSalesHistory = ensureHistoryLength(detail.ttsSales, null);
+  // 当月の売上だけ0開始にし、前月までの実績はそのまま残す（内訳も同じく0開始）
   member.salesHistory[currentMonthIndex()] = 0;
+  member.ttoSalesHistory[currentMonthIndex()] = 0;
+  member.ttsSalesHistory[currentMonthIndex()] = 0;
   member.sales = 0;
   monthlyResetKeys().forEach((key) => {
     member[key] = false;
@@ -970,15 +974,35 @@ function historyValue(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+// 売上内訳の表示。未入力は 0 と区別して「未入力」と出す
+function breakdownText(tto, tts) {
+  const part = (label, value) => `${label} ${value === null || value === undefined ? "未入力" : money(value)}`;
+  return `${part("TTO", tto)} / ${part("TTS", tts)}`;
+}
+
+// 合計は TTO + TTS。どちらも未入力なら null（合計を触らない）
+function breakdownSum(tto, tts) {
+  const a = historyValue(tto);
+  const b = historyValue(tts);
+  if (a === null && b === null) return null;
+  return Number(a || 0) + Number(b || 0);
+}
+
 function memberDetail(member) {
   if (!member) {
     return {
       followers: months.map(() => null),
       sales: months.map(() => null),
+      ttoSales: months.map(() => null),
+      ttsSales: months.map(() => null),
       latestFollower: null,
       latestSales: 0,
+      latestTto: null,
+      latestTts: null,
       previousFollower: null,
       previousSales: null,
+      previousTto: null,
+      previousTts: null,
       hasFollowerData: false,
       hasSalesData: false,
       meetings: []
@@ -1002,6 +1026,10 @@ function memberDetail(member) {
   const sales = explicitSales
     ? member.salesHistory.map(historyValue)
     : generatedSales;
+  // 売上内訳は合計と同じ月に紐づく。履歴が無ければ全月 null（未入力）
+  const historyOrEmpty = (list) => Array.isArray(list) && list.length === months.length ? list.map(historyValue) : months.map(() => null);
+  const ttoSales = historyOrEmpty(member.ttoSalesHistory);
+  const ttsSales = historyOrEmpty(member.ttsSalesHistory);
 
   // 当月に登録がなければ、直近で登録された月まで遡って「最新値」とする
   const followerIndex = recordedIndexAtOrBefore(followers, monthIndex);
@@ -1012,10 +1040,16 @@ function memberDetail(member) {
   return {
     followers,
     sales,
+    ttoSales,
+    ttsSales,
     latestFollower: followerIndex >= 0 ? followers[followerIndex] : null,
     latestSales: salesIndex >= 0 ? Number(sales[salesIndex] || 0) : 0,
+    latestTto: salesIndex >= 0 ? ttoSales[salesIndex] : null,
+    latestTts: salesIndex >= 0 ? ttsSales[salesIndex] : null,
     previousFollower: prevFollowerIndex >= 0 ? followers[prevFollowerIndex] : null,
     previousSales: prevSalesIndex >= 0 ? Number(sales[prevSalesIndex] || 0) : null,
+    previousTto: prevSalesIndex >= 0 ? ttoSales[prevSalesIndex] : null,
+    previousTts: prevSalesIndex >= 0 ? ttsSales[prevSalesIndex] : null,
     hasFollowerData: followerIndex >= 0,
     hasSalesData: sales.some((value) => Number(value || 0) > 0),
     meetings: member.meetings || []
@@ -1093,6 +1127,8 @@ function createBlankMember({ name, stage = "構築", status = "F", progress = 0 
     sales: 0,
     followerHistory: months.map(() => null),
     salesHistory: months.map(() => null),
+    ttoSalesHistory: months.map(() => null),
+    ttsSalesHistory: months.map(() => null),
     accountLinks: [],
     clientMemo: `${name} は新規追加されました。更新タブで進捗・アカウント・MTG情報を登録してください。`,
     meetings: [],
@@ -1306,7 +1342,10 @@ function memberSalesValue(member) {
 
 function salesLeadersForCompany(company, limit = 5) {
   return [...(company.members || [])]
-    .map((member) => ({ member, sales: memberSalesValue(member) }))
+    .map((member) => {
+      const detail = memberDetail(member);
+      return { member, sales: Number(detail.latestSales || 0), tto: detail.latestTto, tts: detail.latestTts };
+    })
     .filter((item) => item.sales > 0)
     .sort((a, b) => b.sales - a.sales)
     .slice(0, limit);
@@ -1331,7 +1370,7 @@ function renderSalesLeaderRows(items, emptyText = "売上が登録されてい�
         <small>${item.member.stage} / 評価 ${item.member.status} / 進捗 ${item.member.progress}%</small>
         <i><b style="width:${Math.min(100, Math.max(8, Math.round((item.sales / maxSales) * 100)))}%"></b></i>
       </span>
-      <em>${money(item.sales)}</em>
+      <em>${money(item.sales)}<small class="sales-split">${breakdownText(item.tto, item.tts)}</small></em>
     </button>
   `).join("");
 }
@@ -1366,11 +1405,12 @@ function renderAdminCommandTop() {
   const topCompanies = [...list].sort((a, b) => Number(b.sales || 0) - Number(a.sales || 0)).slice(0, 6);
   const leaders = salesLeadersAllCompanies(6);
   const topCompanySales = Number(topCompanies[0]?.sales || 0);
+  const allBreakdown = sumCompanyBreakdown(list);
 
   $("#adminFocusFacts").innerHTML = [
     ["クライアント", `${clientCount}社`, `社内管理 ${list.length - clientCount}社`],
     ["在籍", `${totalMembers}名`, `PR ${prCount}名 / 構築 ${buildCount}名`],
-    ["当月売上", `<span class="split-sales"><b>NH+VV ${money(internalSales)}</b><b>その他 ${money(clientSales)}</b></span>`, `合計 ${money(totalSales)} / 売上発生 ${list.filter((company) => Number(company.sales || 0) > 0).length}社`],
+    ["当月売上", `<span class="split-sales"><b>合計 ${money(totalSales)}</b><b>TTO ${allBreakdown.tto === null ? "未入力" : money(allBreakdown.tto)}</b><b>TTS ${allBreakdown.tts === null ? "未入力" : money(allBreakdown.tts)}</b></span>`, `NH+VV ${money(internalSales)} / その他 ${money(clientSales)} / 売上発生 ${list.filter((company) => Number(company.sales || 0) > 0).length}社`],
     ["平均進捗", `${avg}%`, `新規 ${newCount}名`],
     ["当月1000達成", `${f1000Count}名`, "フォロワー1000にチェック済み"],
     ["要確認", `${totalRisk}名`, "確認優先の受講生"]
@@ -1392,6 +1432,7 @@ function renderAdminCommandTop() {
           </span>
           <em>
             <strong>${money(company.sales || 0)}</strong>
+            <small class="sales-split">${breakdownText(companyBreakdown(company).tto, companyBreakdown(company).tts)}</small>
             <i><b style="width:${Math.min(100, Math.max(5, Math.round((Number(company.sales || 0) / Math.max(1, topCompanySales)) * 100)))}%"></b></i>
           </em>
         </button>
@@ -1441,7 +1482,7 @@ function kpiData() {
     { label: "平均進捗率", value: `${averageProgress(active)}%`, caption: "完了項目ベース", tone: fCount > 0 ? "warn" : "good" },
     { label: "要確認", value: fCount, caption: "個人詳細で状況確認", tone: fCount > 0 ? "danger" : "good" },
     { label: "当月1000達成", value: `${f1000Count}名`, caption: "フォロワー1000にチェック済み", tone: f1000Count > 0 ? "good" : "warn" },
-    { label: "当月売上", value: money(company.sales), caption: "成果実績の合計", tone: company.sales > 0 ? "good" : "warn" }
+    { label: "当月売上", value: money(company.sales), caption: breakdownText(companyBreakdown(company).tto, companyBreakdown(company).tts), tone: company.sales > 0 ? "good" : "warn" }
   ];
 }
 
@@ -1513,9 +1554,12 @@ function renderExecutiveFocus() {
   const f1000Count = follower1000Count(members);
   const salesLeaders = salesLeadersForCompany(company, 5);
 
+  const breakdown = companyBreakdown(company);
   $("#focusConclusionFacts").innerHTML = [
     ["在籍", `${currentEnrollment(company)}名`],
-    ["売上", money(company.sales)],
+    ["合計売上", money(company.sales)],
+    ["TTO売上", breakdown.tto === null ? "未入力" : money(breakdown.tto)],
+    ["TTS売上", breakdown.tts === null ? "未入力" : money(breakdown.tts)],
     ["平均進捗", `${avg}%`],
     ["当月1000達成", `${f1000Count}名`],
     ["要確認", `${riskCount(company)}名`],
@@ -1969,7 +2013,9 @@ function sheetColumns() {
     { key: "status", label: "評価", type: "formula" },
     { key: "progress", label: "進捗", type: "formula" },
     { key: "followers", label: "フォロワー", type: "number" },
-    { key: "sales", label: "売上", type: "number" },
+    { key: "salesTto", label: "TTO売上", type: "number" },
+    { key: "salesTts", label: "TTS売上", type: "number" },
+    { key: "sales", label: "合計売上", type: "number" },
     ...allDetailMilestones().map((item) => ({ ...item, type: "check" })),
     { key: "accountLinks", label: "運用アカウント", type: "accounts" },
     { key: "clientMemo", label: "共有メモ", type: "memo" },
@@ -1985,7 +2031,7 @@ function renderUpdateSheet() {
       <th class="sticky-col">対象</th>
       <th>入力</th>
       <th colspan="2">自動計算</th>
-      <th colspan="2">実績</th>
+      <th colspan="4">実績（合計 = TTO + TTS）</th>
       <th colspan="${allDetailMilestones().length}">達成項目</th>
       <th colspan="2">共有</th>
       <th>MTG</th>
@@ -2045,10 +2091,11 @@ function renderUpdateCell(member, detail, column, index, effectiveMember = membe
   }
   if (column.type === "number") {
     const draft = state.updateDrafts[member.name] || {};
-    const fallback = column.key === "followers" ? detail.latestFollower : detail.latestSales;
+    const fallback = currentDraftValue(member, column.key);
     const value = draft[column.key] ?? (fallback ?? "");
     const pending = hasOwn(draft, column.key) ? " pending" : "";
-    return `<td><input class="sheet-input number-input${pending}" data-field="${column.key}" type="number" min="0" value="${value}" /></td>`;
+    const placeholder = column.key === "salesTto" || column.key === "salesTts" ? ` placeholder="未入力"` : "";
+    return `<td><input class="sheet-input number-input${pending}" data-field="${column.key}" type="number" min="0" value="${value}"${placeholder} /></td>`;
   }
   if (column.type === "check") {
     return `
@@ -2121,7 +2168,8 @@ function meetingCardHtml(meeting, index, meta = "", editable = false) {
     ["結果", meeting.result],
     ["記録元", meeting.coach || "スプシ記録"],
     ["フォロワー", meeting.follower === null || meeting.follower === undefined ? "未登録" : `${Number(meeting.follower).toLocaleString("ja-JP")}人`],
-    ["売上", money(Number(meeting.sale || 0))]
+    ["合計売上", money(Number(meeting.sale || 0))],
+    ["内訳", breakdownText(meeting.saleTto ?? null, meeting.saleTts ?? null)]
   ];
   return `
     <article class="meeting-card tappable" data-meeting="${index}" tabindex="0" role="button" aria-expanded="false">
@@ -2295,6 +2343,10 @@ function draftValueMatchesOriginal(member, field, value) {
       || Number(current) === nextValue;
   }
   if (field === "sales") return Number(current || 0) === Number(value || 0);
+  if (field === "salesTto" || field === "salesTts") {
+    // 未入力（null）と 0 は別物として扱う
+    return historyValue(current) === historyValue(value);
+  }
   if (field === "accountLinks") {
     return JSON.stringify(normalizeAccountLinks(current)) === JSON.stringify(normalizeAccountLinks(value));
   }
@@ -2304,7 +2356,9 @@ function draftValueMatchesOriginal(member, field, value) {
 
 function draftFieldLabel(field) {
   if (field === "followers") return "フォロワー";
-  if (field === "sales") return "売上";
+  if (field === "sales") return "合計売上";
+  if (field === "salesTto") return "TTO売上";
+  if (field === "salesTts") return "TTS売上";
   if (field === "stage") return "段階";
   if (field === "accountLinks") return "運用アカウント";
   if (field === "clientMemo") return "共有メモ";
@@ -2314,6 +2368,7 @@ function draftFieldLabel(field) {
 function draftValueLabel(member, field, value) {
   if (field === "followers") return Number(value).toLocaleString("ja-JP");
   if (field === "sales") return money(Number(value));
+  if (field === "salesTto" || field === "salesTts") return historyValue(value) === null ? "未入力" : money(Number(value));
   if (field === "accountLinks") {
     const links = normalizeAccountLinks(value);
     const rawCount = Array.isArray(value) ? value.filter((item) => String(item || "").trim()).length : String(value || "").split(/\n|,|、/).map((item) => item.trim()).filter(Boolean).length;
@@ -2328,6 +2383,8 @@ function currentDraftValue(member, field) {
   const detail = memberDetail(member);
   if (field === "followers") return detail.latestFollower;
   if (field === "sales") return detail.latestSales;
+  if (field === "salesTto") return detail.latestTto;
+  if (field === "salesTts") return detail.latestTts;
   if (field === "accountLinks") return member.accountLinks || [];
   return member[field];
 }
@@ -2485,8 +2542,9 @@ function renderCompanyGrid() {
             <i><b style="width:${Math.min(100, Math.max(3, avg))}%"></b></i>
           </div>
           <div>
-            <span>売上 ${money(sales)}</span>
+            <span>合計売上 ${money(sales)}</span>
             <i><b style="width:${Math.min(100, Math.max(3, Math.round((sales / maxSales) * 100)))}%"></b></i>
+            <small class="sales-split">${breakdownText(companyBreakdown(company).tto, companyBreakdown(company).tts)}</small>
           </div>
         </div>
         <p class="subtext">要確認率 ${riskRate}% / クリックで会社ページへ</p>
@@ -2549,8 +2607,11 @@ function renderCompanyTable() {
     if (key === "progress") return averageProgress(company.members);
     if (key === "risk") return riskCount(company);
     if (key === "sales") return Number(company.sales || 0);
+    if (key === "salesTto") return Number(companyBreakdown(company).tto || 0);
+    if (key === "salesTts") return Number(companyBreakdown(company).tts || 0);
     return 0;
   };
+  const breakdownCell = (value) => value === null ? `<span class="subtext">未入力</span>` : money(value);
   const rows = companies()
     .filter((company) => company.name.includes(state.companySearch.trim()))
     .sort((a, b) => {
@@ -2581,6 +2642,8 @@ function renderCompanyTable() {
         <td><span class="table-progress"><b style="width:${Math.min(100, Math.max(3, avg))}%"></b></span><strong>${avg}%</strong></td>
         <td><span class="badge ${tone === "danger" ? "" : "b"}">${risk}名</span></td>
         <td><strong>${money(company.sales || 0)}</strong></td>
+        <td>${breakdownCell(companyBreakdown(company).tto)}</td>
+        <td>${breakdownCell(companyBreakdown(company).tts)}</td>
       </tr>
     `;
   }).join("");
@@ -2681,6 +2744,38 @@ function recalcCompanyStats(company) {
   company.prCount = company.members.filter((item) => item.stage === "PR").length;
   company.buildCount = company.members.filter((item) => item.stage === "構築").length;
   company.sales = company.members.reduce((sum, member) => sum + memberDetail(member).latestSales, 0);
+  // 内訳は入力済みの受講生分だけ積み上げる。全員未入力なら null（未入力表示）
+  const breakdown = companyBreakdownFromMembers(company.members);
+  company.ttoSales = breakdown.tto;
+  company.ttsSales = breakdown.tts;
+}
+
+function companyBreakdownFromMembers(members) {
+  let tto = null;
+  let tts = null;
+  (members || []).forEach((member) => {
+    const detail = memberDetail(member);
+    if (detail.latestTto !== null) tto = (tto || 0) + Number(detail.latestTto);
+    if (detail.latestTts !== null) tts = (tts || 0) + Number(detail.latestTts);
+  });
+  return { tto, tts };
+}
+
+// 会社の売上内訳。保存済みの値を優先し、無ければ受講生から積み上げる
+function companyBreakdown(company) {
+  const tto = historyValue(company?.ttoSales);
+  const tts = historyValue(company?.ttsSales);
+  if (tto !== null || tts !== null) return { tto, tts };
+  return companyBreakdownFromMembers(company?.members);
+}
+
+function sumCompanyBreakdown(list) {
+  return list.reduce((acc, company) => {
+    const { tto, tts } = companyBreakdown(company);
+    if (tto !== null) acc.tto = (acc.tto || 0) + tto;
+    if (tts !== null) acc.tts = (acc.tts || 0) + tts;
+    return acc;
+  }, { tto: null, tts: null });
 }
 
 function updateSheetMember(member, field, rawValue, checked) {
@@ -2696,7 +2791,25 @@ function updateSheetMember(member, field, rawValue, checked) {
   if (field === "sales") {
     member.salesHistory = [...detail.sales];
     member.salesHistory[monthIndex] = Number(rawValue);
-    addDetailUpdate("数字更新", `${member.name} の売上を更新`, `${months[monthIndex]} 売上 ${money(Number(rawValue))}`, member);
+    addDetailUpdate("数字更新", `${member.name} の売上を更新`, `${months[monthIndex]} 合計売上 ${money(Number(rawValue))}`, member);
+    return;
+  }
+  if (field === "salesTto" || field === "salesTts") {
+    // 内訳を更新したら合計も TTO + TTS で揃える（合計だけ別入力されていても内訳を正とする）
+    member.ttoSalesHistory = [...detail.ttoSales];
+    member.ttsSalesHistory = [...detail.ttsSales];
+    member.salesHistory = [...detail.sales];
+    const nextValue = historyValue(rawValue);
+    if (field === "salesTto") member.ttoSalesHistory[monthIndex] = nextValue;
+    else member.ttsSalesHistory[monthIndex] = nextValue;
+    const total = breakdownSum(member.ttoSalesHistory[monthIndex], member.ttsSalesHistory[monthIndex]);
+    if (total !== null) member.salesHistory[monthIndex] = total;
+    addDetailUpdate(
+      "数字更新",
+      `${member.name} の${field === "salesTto" ? "TTO" : "TTS"}売上を更新`,
+      `${months[monthIndex]} ${breakdownText(member.ttoSalesHistory[monthIndex], member.ttsSalesHistory[monthIndex])} / 合計 ${money(member.salesHistory[monthIndex])}`,
+      member
+    );
     return;
   }
   if (field === "stage") {
@@ -2742,7 +2855,9 @@ async function applyUpdateDrafts() {
       const member = company.members.find((item) => item.name === memberName);
       if (!member) return;
       const shouldRecalculate = Object.keys(fields).some((field) => milestoneKeys().includes(field));
-      Object.entries(fields).forEach(([field, value]) => {
+      // 合計を先に適用し、内訳（TTO/TTS）を後から適用して合計を内訳に揃える
+      const breakdownLast = (a, b) => Number(a[0].startsWith("salesT")) - Number(b[0].startsWith("salesT"));
+      Object.entries(fields).sort(breakdownLast).forEach(([field, value]) => {
         updateSheetMember(member, field, value, Boolean(value));
       });
       const beforeStatus = member.status;
@@ -2953,14 +3068,27 @@ function openMemberDetail(member) {
       tone: detail.hasFollowerData ? "good" : "warn"
     },
     {
-      label: "売上",
+      label: "合計売上",
       value: compactMoney(detail.latestSales),
-      caption: detail.latestSales > 0 ? "成果登録あり" : "売上0円",
+      caption: detail.latestSales > 0 ? `前回比 ${metricDeltaText(detail.latestSales, detail.previousSales, "円")}` : "売上0円",
       tone: detail.latestSales > 0 ? "good" : "warn"
+    },
+    {
+      label: "TTO売上",
+      value: detail.latestTto === null ? "未入力" : compactMoney(detail.latestTto),
+      caption: detail.latestTto === null ? "更新タブで入力" : `前回比 ${metricDeltaText(detail.latestTto, detail.previousTto, "円")}`,
+      tone: detail.latestTto > 0 ? "good" : "warn"
+    },
+    {
+      label: "TTS売上",
+      value: detail.latestTts === null ? "未入力" : compactMoney(detail.latestTts),
+      caption: detail.latestTts === null ? "更新タブで入力" : `前回比 ${metricDeltaText(detail.latestTts, detail.previousTts, "円")}`,
+      tone: detail.latestTts > 0 ? "good" : "warn"
     }
   ].map(kpiCard).join("");
   renderMiniChart("#followerChart", detail.followers, "followers", "#followerTrendVerdict");
   renderMiniChart("#salesChart", detail.sales, "sales", "#salesTrendVerdict");
+  renderSalesBreakdownStrip("#salesBreakdownStrip", detail);
   renderMeetings(detail.meetings);
   renderCompletionMap(member);
   fillDetailForms(member, detail);
@@ -3096,7 +3224,7 @@ function generateMemberAutoConclusion(member) {
     `進捗${Number(member.progress || 0)}%`,
     `${done}/${all.length}項目完了`,
     `フォロワー${formatFollowerValue(latestFollower)}`,
-    `売上${money(latestSales)}`,
+    `合計売上${money(latestSales)}（${breakdownText(detail.latestTto, detail.latestTts)}）`,
     `MTG${meetingCount}件`,
     `アカウント${accountCount}/2件`
   ];
@@ -3257,6 +3385,8 @@ function blockerAction(key, member) {
 function fillDetailForms(member, detail) {
   $("#detailFollowers").value = detail.latestFollower ?? "";
   $("#detailSales").value = detail.latestSales;
+  $("#detailSalesTto").value = detail.latestTto ?? "";
+  $("#detailSalesTts").value = detail.latestTts ?? "";
   $("#detailStage").value = member.stage;
   $("#detailStatus").value = member.status;
   $("#detailProgress").value = member.progress;
@@ -3339,6 +3469,24 @@ function renderMiniChart(selector, values, type, verdictSelector) {
         <span>${label}</span>
         <div class="mini-bar ${hasValue ? "" : "empty"}" style="height:${height}px"></div>
         <small>${months[index]}</small>
+      </div>
+    `;
+  }).join("");
+}
+
+// 売上推移グラフの下に、月ごとの TTO / TTS 内訳を並べる
+function renderSalesBreakdownStrip(selector, detail) {
+  const target = $(selector);
+  if (!target) return;
+  const visibleCount = Math.min(currentMonthIndex() + 1, months.length);
+  target.innerHTML = months.slice(0, visibleCount).map((label, index) => {
+    const tto = detail.ttoSales[index];
+    const tts = detail.ttsSales[index];
+    const empty = tto === null && tts === null;
+    return `
+      <div class="breakdown-cell ${empty ? "empty" : ""}">
+        <b>TTO ${tto === null ? "–" : compactMoney(tto)}</b>
+        <b>TTS ${tts === null ? "–" : compactMoney(tts)}</b>
       </div>
     `;
   }).join("");
@@ -3522,6 +3670,18 @@ function bindEvents() {
     const memberName = row?.dataset.member;
     if (!memberName) return;
     setUpdateDraft(memberName, field, target.value);
+    // TTO/TTS を入れたら合計欄を自動で TTO + TTS にする
+    if (field === "salesTto" || field === "salesTts") {
+      const tto = row.querySelector('[data-field="salesTto"]')?.value;
+      const tts = row.querySelector('[data-field="salesTts"]')?.value;
+      const total = breakdownSum(tto, tts);
+      const totalInput = row.querySelector('[data-field="sales"]');
+      if (total !== null && totalInput) {
+        totalInput.value = total;
+        totalInput.classList.add("pending");
+        setUpdateDraft(memberName, "sales", String(total));
+      }
+    }
   });
 
   $("#saveUpdateSheet").addEventListener("click", applyUpdateDrafts);
@@ -3646,6 +3806,8 @@ function bindEvents() {
       coach: existing?.coach || "運用者",
       follower: existing ? existing.follower : detail.latestFollower,
       sale: existing ? existing.sale : detail.latestSales,
+      saleTto: existing ? existing.saleTto ?? null : detail.latestTto,
+      saleTts: existing ? existing.saleTts ?? null : detail.latestTts,
       content: $("#mtgContent").value,
       next: $("#mtgNextAction").value,
       result: $("#mtgResult").value,
@@ -3681,6 +3843,8 @@ function bindEvents() {
       coach: "運用者",
       follower: detail.latestFollower,
       sale: detail.latestSales,
+      saleTto: detail.latestTto,
+      saleTts: detail.latestTts,
       content: $("#detailMeetingMemo").value,
       next: actionFor(member),
       result: $("#detailMeetingResult").value
@@ -3698,11 +3862,29 @@ function bindEvents() {
     const monthIndex = currentMonthIndex();
     member.followerHistory = [...detail.followers];
     member.salesHistory = [...detail.sales];
+    member.ttoSalesHistory = [...detail.ttoSales];
+    member.ttsSalesHistory = [...detail.ttsSales];
     const followerInput = $("#detailFollowers").value;
     member.followerHistory[monthIndex] = followerInput === "" ? null : Number(followerInput);
-    member.salesHistory[monthIndex] = Number($("#detailSales").value);
-    addDetailUpdate("数字更新", `${member.name} の数字を更新`, `${months[monthIndex]} フォロワー ${formatFollowerValue(member.followerHistory[monthIndex])} / 売上 ${money(Number($("#detailSales").value))}`);
+    member.ttoSalesHistory[monthIndex] = historyValue($("#detailSalesTto").value);
+    member.ttsSalesHistory[monthIndex] = historyValue($("#detailSalesTts").value);
+    // 内訳が入っていれば合計は TTO + TTS。未入力なら合計欄をそのまま使う
+    const total = breakdownSum(member.ttoSalesHistory[monthIndex], member.ttsSalesHistory[monthIndex]);
+    member.salesHistory[monthIndex] = total !== null ? total : Number($("#detailSales").value);
+    addDetailUpdate(
+      "数字更新",
+      `${member.name} の数字を更新`,
+      `${months[monthIndex]} フォロワー ${formatFollowerValue(member.followerHistory[monthIndex])} / 合計売上 ${money(member.salesHistory[monthIndex])} / ${breakdownText(member.ttoSalesHistory[monthIndex], member.ttsSalesHistory[monthIndex])}`
+    );
     void persistAndRefresh(member);
+  });
+
+  // 個人詳細の数字フォームでも TTO/TTS を入れたら合計を自動で揃える
+  ["#detailSalesTto", "#detailSalesTts"].forEach((selector) => {
+    $(selector)?.addEventListener("input", () => {
+      const total = breakdownSum($("#detailSalesTto").value, $("#detailSalesTts").value);
+      if (total !== null) $("#detailSales").value = total;
+    });
   });
 
   $("#detailStatusForm").addEventListener("submit", (event) => {
