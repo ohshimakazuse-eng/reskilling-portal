@@ -86,6 +86,8 @@ export function buildCompanyFacts(company, months, date = new Date()) {
 
   const memberFacts = members.map((member) => {
     const sales = Array.isArray(member.salesHistory) ? member.salesHistory : [];
+    const ttoSales = Array.isArray(member.ttoSalesHistory) ? member.ttoSalesHistory : [];
+    const ttsSales = Array.isArray(member.ttsSalesHistory) ? member.ttsSalesHistory : [];
     const followers = Array.isArray(member.followerHistory) ? member.followerHistory : [];
     const salesIndex = recordedIndexAtOrBefore(sales, monthIndex);
     const followerIndex = recordedIndexAtOrBefore(followers, monthIndex);
@@ -101,6 +103,9 @@ export function buildCompanyFacts(company, months, date = new Date()) {
       progressPercent: Number(member.progress || 0),
       currentSales: salesIndex >= 0 ? Number(sales[salesIndex] || 0) : 0,
       previousSales: prevSalesIndex >= 0 ? Number(sales[prevSalesIndex] || 0) : null,
+      // 内訳は未入力なら null（0 と区別して「未計測」扱い）
+      currentTto: salesIndex >= 0 ? historyValue(ttoSales[salesIndex]) : null,
+      currentTts: salesIndex >= 0 ? historyValue(ttsSales[salesIndex]) : null,
       currentFollowers: followerIndex >= 0 ? Number(followers[followerIndex] || 0) : null,
       previousFollowers: prevFollowerIndex >= 0 ? Number(followers[prevFollowerIndex] || 0) : null,
       milestones,
@@ -120,6 +125,10 @@ export function buildCompanyFacts(company, months, date = new Date()) {
 
   const totalSales = memberFacts.reduce((sum, m) => sum + m.currentSales, 0);
   const previousTotalSales = memberFacts.reduce((sum, m) => sum + Number(m.previousSales || 0), 0);
+  const sumOrNull = (key) => memberFacts.reduce((sum, m) => (m[key] === null ? sum : (sum || 0) + m[key]), null);
+  const totalTto = sumOrNull("currentTto");
+  const totalTts = sumOrNull("currentTts");
+  const breakdownEnteredCount = memberFacts.filter((m) => m.currentTto !== null || m.currentTts !== null).length;
   const earners = memberFacts.filter((m) => m.currentSales > 0).sort((a, b) => b.currentSales - a.currentSales);
   const blocked = memberFacts.filter((m) => m.currentSales <= 0);
 
@@ -165,6 +174,9 @@ export function buildCompanyFacts(company, months, date = new Date()) {
 
     sales: {
       current: totalSales,
+      tto: totalTto,
+      tts: totalTts,
+      breakdownEnteredCount,
       previousReport: previousTotalSales,
       increase: totalSales - previousTotalSales,
       projectedMonthEnd: projectedMonthEndSales,
@@ -208,7 +220,7 @@ export function buildCompanyFacts(company, months, date = new Date()) {
 
 const SECTIONS = [
   ["numbers", "数値", "前回報告時からの増減と月末着地見込に絞る。現在売上・在籍数・平均進捗・要確認人数は同じ画面に表示済みのため書かない。月間目標が未計測のため進捗率と不足額は「未計測」と明記する"],
-  ["salesBreakdown", "売上内訳", "売上発生人数・売上発生者1人あたり平均・上位への集中率と、そこから読み取れるリスクを書く。上位者の氏名と金額は同じ画面に一覧があるため列挙しない。講師本人と研修生の区分は未計測と明記する"],
+  ["salesBreakdown", "売上内訳", "TTO売上とTTS売上の金額と構成比（内訳が未計測ならその旨と入力済み人数）、売上発生人数・売上発生者1人あたり平均・上位への集中率と、そこから読み取れるリスクを書く。上位者の氏名と金額は同じ画面に一覧があるため列挙しない。講師本人と研修生の区分は未計測と明記する"],
   ["kpi", "主要KPI", "画面に出ていないKPIだけを書く（稼働人数・投稿開始人数・商品申請済み人数・MTG実施件数・アカウント未登録人数）。在籍数・PR人数・評価分布・平均進捗・要確認人数は画面に表示済みのため書かない。投稿本数/案件提案数/商談数/成約数は未計測と明記する"],
   ["rootCause", "未達原因", "未稼働・投稿不足・CR不足・案件不足・連絡停止それぞれの人数と、代表的な該当者名・根拠を記載する。感想は書かない"],
   ["actions", "今週の改善施策", "対象者・担当者・実施内容・実施期限・完了条件・改善するKPI・見込売上を必ずセットで、2〜3件記載する"],
@@ -276,6 +288,9 @@ export function factsToPrompt(facts) {
   const memberLines = facts.members.map((m) => {
     const bits = [`${m.name}（${m.stage}/評価${m.evaluation}/進捗${m.progressPercent}%）`];
     bits.push(`当月売上${yen(m.currentSales)}`);
+    if (m.currentTto !== null || m.currentTts !== null) {
+      bits.push(`内訳 TTO${m.currentTto === null ? "未計測" : yen(m.currentTto)}/TTS${m.currentTts === null ? "未計測" : yen(m.currentTts)}`);
+    }
     if (m.previousSales !== null) bits.push(`前月売上${yen(m.previousSales)}`);
     bits.push(m.currentFollowers !== null ? `フォロワー${m.currentFollowers.toLocaleString("ja-JP")}人` : "フォロワー未登録");
     bits.push(`MTG${m.meetingCount}件`);
@@ -299,6 +314,9 @@ export function factsToPrompt(facts) {
 
 # 売上
 現在売上: ${yen(facts.sales.current)}
+TTO売上: ${facts.sales.tto === null ? "未計測（内訳未入力）" : yen(facts.sales.tto)}
+TTS売上: ${facts.sales.tts === null ? "未計測（内訳未入力）" : yen(facts.sales.tts)}
+内訳を入力済みの受講生: ${facts.sales.breakdownEnteredCount}名 / ${facts.enrollment}名
 前回報告時の売上: ${yen(facts.sales.previousReport)}
 増加額: ${facts.sales.increase >= 0 ? "+" : ""}${yen(facts.sales.increase)}
 月末着地見込（当月ペースの日割り換算）: ${yen(facts.sales.projectedMonthEnd)}
@@ -383,7 +401,10 @@ export function fallbackProgressReport(facts) {
     numbers: `前回報告時から ${facts.sales.increase >= 0 ? "+" : ""}${yen(facts.sales.increase)} の増減です（前回報告時 ${yen(facts.sales.previousReport)}）。`
       + `当月ペースの日割り換算による月末着地見込は ${yen(facts.sales.projectedMonthEnd)}、残り${facts.daysRemainingInMonth}日です。`
       + `月間売上目標が未計測のため、進捗率と目標に対する不足額は未計測です。`,
-    salesBreakdown: `売上が発生しているのは ${facts.sales.earnerCount}名、売上発生者1人あたり平均は ${yen(facts.sales.averagePerEarner)} です。`
+    salesBreakdown: `${facts.sales.tto === null && facts.sales.tts === null
+      ? `TTO/TTSの内訳は未計測です（内訳入力済み ${facts.sales.breakdownEnteredCount}名）。`
+      : `内訳はTTO ${facts.sales.tto === null ? "未計測" : yen(facts.sales.tto)}、TTS ${facts.sales.tts === null ? "未計測" : yen(facts.sales.tts)}${facts.sales.current > 0 && facts.sales.tto !== null && facts.sales.tts !== null ? `（TTO比率 ${Math.round((facts.sales.tto / facts.sales.current) * 100)}%）` : ""}です。`}`
+      + `売上が発生しているのは ${facts.sales.earnerCount}名、売上発生者1人あたり平均は ${yen(facts.sales.averagePerEarner)} です。`
       + `上位1名への集中率は ${facts.sales.topOneSharePercent ?? "算出不可"}%、上位3名で ${facts.sales.topThreeSharePercent ?? "算出不可"}% です。`
       + `${Number(facts.sales.topOneSharePercent) >= 50 ? "特定の受講生への依存度が高く、その1名の稼働が止まると当月着地が大きく下振れします。" : ""}`
       + `講師本人と研修生の売上区分は未計測です。`,

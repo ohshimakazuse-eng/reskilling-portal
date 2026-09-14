@@ -637,7 +637,7 @@ select:disabled {
   background: #ffffff;
 }
 
-.number-board .focus-facts div:nth-child(3) {
+.number-board .focus-facts div:nth-child(2) {
   grid-column: 1 / -1;
   min-height: 82px;
   background: #f4f8ff;
@@ -674,15 +674,61 @@ select:disabled {
   line-height: 1.15;
 }
 
-.number-board .focus-facts div:nth-child(3) strong {
+.number-board .focus-facts div:nth-child(2) strong {
   font-size: 28px;
 }
 
 .split-sales {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   font-size: 18px;
+}
+
+/* 売上の内訳（TTO / TTS）。合計の下に小さく添える */
+.sales-split {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.focus-member em .sales-split,
+.company-rank-row em .sales-split {
+  text-align: right;
+}
+
+.company-metrics .sales-split {
+  white-space: normal;
+}
+
+/* 売上推移グラフ直下の月別内訳 */
+.breakdown-strip {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 7px;
+  padding: 6px 4px 0;
+}
+
+.breakdown-cell {
+  display: grid;
+  gap: 2px;
+  padding: 4px 2px;
+  border-top: 2px solid #d7e3f7;
+  font-size: 10px;
+  color: var(--ink);
+  text-align: center;
+}
+
+.breakdown-cell b {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.breakdown-cell.empty {
+  color: var(--muted);
 }
 
 .summary-fact .split-sales {
@@ -2474,7 +2520,7 @@ td {
 }
 
 .detail-kpis {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .detail-section {
@@ -3105,14 +3151,14 @@ td {
     min-width: 0;
   }
 
-  .number-board .focus-facts div:nth-child(3) {
+  .number-board .focus-facts div:nth-child(2) {
     grid-column: auto;
     min-height: 74px;
   }
 
   .focus-facts strong,
   .number-board .focus-facts strong,
-  .number-board .focus-facts div:nth-child(3) strong {
+  .number-board .focus-facts div:nth-child(2) strong {
     font-size: 20px;
   }
 

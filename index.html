@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Next Ramp</title>
-    <link rel="stylesheet" href="./styles.css?v=20260623-egress-reduction" />
+    <link rel="stylesheet" href="./styles.css?v=20260914-sales-breakdown" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -232,7 +232,9 @@
                     <th><button class="table-sort" data-sort="prCount" type="button">PR</button></th>
                     <th><button class="table-sort" data-sort="progress" type="button">平均進捗</button></th>
                     <th><button class="table-sort" data-sort="risk" type="button">要確認</button></th>
-                    <th><button class="table-sort" data-sort="sales" type="button">売上</button></th>
+                    <th><button class="table-sort" data-sort="sales" type="button">合計売上</button></th>
+                    <th><button class="table-sort" data-sort="salesTto" type="button">TTO売上</button></th>
+                    <th><button class="table-sort" data-sort="salesTts" type="button">TTS売上</button></th>
                   </tr>
                 </thead>
                 <tbody id="companyTable"></tbody>
@@ -606,7 +608,15 @@
                   <input id="detailFollowers" type="number" min="0" value="350" />
                 </label>
                 <label class="form-field">
-                  <span>売上</span>
+                  <span>TTO売上</span>
+                  <input id="detailSalesTto" type="number" min="0" placeholder="未入力" />
+                </label>
+                <label class="form-field">
+                  <span>TTS売上</span>
+                  <input id="detailSalesTts" type="number" min="0" placeholder="未入力" />
+                </label>
+                <label class="form-field">
+                  <span>合計売上（TTO + TTS）</span>
                   <input id="detailSales" type="number" min="0" value="0" />
                 </label>
               </div>
@@ -677,6 +687,7 @@
             <span class="pill" id="salesTrendVerdict">判定</span>
           </div>
           <div class="mini-chart sales" id="salesChart"></div>
+          <div class="breakdown-strip" id="salesBreakdownStrip"></div>
         </div>
 
         <div class="detail-section">
@@ -692,6 +703,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260810-mtg-minutes"></script>
+    <script src="./app.js?v=20260914-sales-breakdown"></script>
   </body>
 </html>

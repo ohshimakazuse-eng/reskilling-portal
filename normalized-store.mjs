@@ -128,6 +128,22 @@ function findOrCreateCompany(tables, legacyCompany) {
   return company;
 }
 
+// 受講生ごとの「直近で登録された月」の内訳を合計する。全員未入力なら null。
+function sumBreakdown(members, key) {
+  let total = null;
+  members.forEach((member) => {
+    const history = Array.isArray(member[key]) ? member[key] : [];
+    for (let index = history.length - 1; index >= 0; index -= 1) {
+      const value = historyValue(history[index]);
+      if (value !== null) {
+        total = (total || 0) + value;
+        break;
+      }
+    }
+  });
+  return total;
+}
+
 function latestSummaryForCompany(tables, companyId) {
   return tables.company_monthly_summaries
     .filter((summary) => summary.company_id === companyId)
@@ -179,7 +195,18 @@ function findOrCreateMember(tables, company, legacyMember) {
   return member;
 }
 
-function upsertMemberMetric(tables, memberId, metricMonth, salesAmount, followerCount = 0) {
+// 売上の内訳（TTO / TTS）。sales_amount は合計のまま維持し、内訳は source_ref.sales に持つ。
+// 列を増やさないので本番DBのマイグレーション無しで動く。内訳が未入力の月は null。
+export function salesBreakdownFromMetric(metric) {
+  const stored = metric?.source_ref?.sales;
+  if (!stored || typeof stored !== "object") return { tto: null, tts: null };
+  return {
+    tto: historyValue(stored.tto),
+    tts: historyValue(stored.tts)
+  };
+}
+
+function upsertMemberMetric(tables, memberId, metricMonth, salesAmount, followerCount = 0, breakdown = null) {
   let metric = tables.member_metrics.find((item) => item.member_id === memberId && item.metric_month === metricMonth);
   if (!metric) {
     metric = {
@@ -198,6 +225,11 @@ function upsertMemberMetric(tables, memberId, metricMonth, salesAmount, follower
   // null/undefined は「その月は未登録」を意味し、既存値を上書きしない
   if (followerCount !== null && followerCount !== undefined) metric.follower_count = Number(followerCount || 0);
   if (salesAmount !== null && salesAmount !== undefined) metric.sales_amount = Number(salesAmount || 0);
+  if (breakdown) {
+    const tto = historyValue(breakdown.tto);
+    const tts = historyValue(breakdown.tts);
+    metric.source_ref = { ...(metric.source_ref || {}), sales: { tto, tts } };
+  }
   metric.updated_at = new Date().toISOString();
   metric.source_kind = "manual";
 }
@@ -244,6 +276,8 @@ function historyValue(value) {
 function upsertMemberMetricHistory(tables, memberId, months, legacyMember) {
   const sales = Array.isArray(legacyMember.salesHistory) ? legacyMember.salesHistory : null;
   const followers = Array.isArray(legacyMember.followerHistory) ? legacyMember.followerHistory : null;
+  const tto = Array.isArray(legacyMember.ttoSalesHistory) ? legacyMember.ttoSalesHistory : null;
+  const tts = Array.isArray(legacyMember.ttsSalesHistory) ? legacyMember.ttsSalesHistory : null;
   if (!sales && !followers) return false;
   let wrote = false;
   let carriedFollower = null;
@@ -253,8 +287,10 @@ function upsertMemberMetricHistory(tables, memberId, months, legacyMember) {
     if (followerValue !== null) carriedFollower = followerValue;
     if (followerValue === null && salesValue === null) return;
     const monthKey = monthKeyForLabel(months, index);
+    // 内訳の配列が渡されている場合のみ書く。無い（旧形式）場合は既存の内訳を保持する
+    const breakdown = tto || tts ? { tto: tto ? tto[index] : null, tts: tts ? tts[index] : null } : null;
     // フォロワーは累計値のため、その月の登録がなければ直近値を引き継ぐ
-    upsertMemberMetric(tables, memberId, monthKey, salesValue, followerValue !== null ? followerValue : carriedFollower);
+    upsertMemberMetric(tables, memberId, monthKey, salesValue, followerValue !== null ? followerValue : carriedFollower, breakdown);
     wrote = true;
   });
   return wrote;
@@ -449,6 +485,7 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
             (metricsByMember.get(member.id) || []).map((row) => [String(row.metric_month), row])
           );
           const metricForIndex = (label, index) => metricByMonth.get(monthKeyForLabel(months, index)) || null;
+          const latestBreakdown = salesBreakdownFromMetric(metric);
           const milestoneValues = {};
           (milestonesByMember.get(member.id) || []).forEach((milestone) => {
             const legacyKey = reverseMilestoneMap[milestone.milestone_key];
@@ -468,6 +505,8 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
               coach: session.coach_name || "スプシ記録",
               follower: metric?.follower_count || 0,
               sale: metric?.sales_amount || 0,
+              saleTto: latestBreakdown.tto,
+              saleTts: latestBreakdown.tts,
               content: session.content,
               next: session.next_action || "",
               result: resultToLegacy[session.result] || session.result,
@@ -490,6 +529,9 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
               const row = metricForIndex(label, index);
               return row ? Number(row.sales_amount || 0) : null;
             }),
+            // 売上内訳。記録の無い月・内訳未入力の月は null（0 と区別する）
+            ttoSalesHistory: months.map((label, index) => salesBreakdownFromMetric(metricForIndex(label, index)).tto),
+            ttsSalesHistory: months.map((label, index) => salesBreakdownFromMetric(metricForIndex(label, index)).tts),
             accountLinks,
             clientMemo: member.client_memo || undefined,
             meetings,
@@ -518,6 +560,9 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
         buildCount: summary?.build_count ?? members.filter((member) => member.stage === "構築").length,
         prCount: summary?.pr_count ?? members.filter((member) => member.stage === "PR").length,
         sales: summary?.total_sales_amount ?? members.reduce((sum, member) => sum + member.sales, 0),
+        // 会社の内訳合計。保存済みならそれを、無ければ受講生の最新内訳から積み上げる
+        ttoSales: summary?.source_ref?.sales?.tto ?? sumBreakdown(members, "ttoSalesHistory"),
+        ttsSales: summary?.source_ref?.sales?.tts ?? sumBreakdown(members, "ttsSalesHistory"),
         enrollment,
         progressReport: report ? {
           good: report.progress_good_text || "",
@@ -689,6 +734,9 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
       const latestSales = Array.isArray(legacyMember.salesHistory) && legacyMember.salesHistory.length
         ? legacyMember.salesHistory.at(-1)
         : legacyMember.sales;
+      const latestBreakdown = legacyMember.salesTto !== undefined || legacyMember.salesTts !== undefined
+        ? { tto: legacyMember.salesTto, tts: legacyMember.salesTts }
+        : null;
       const latestFollowers = Array.isArray(legacyMember.followerHistory) && legacyMember.followerHistory.length
         ? legacyMember.followerHistory.at(-1)
         : 0;
@@ -697,7 +745,7 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
       upsertMemberMilestones(tables, member.id, legacyMember);
       // 月次履歴があれば月ごとに保存し、無い旧形式のみ従来どおり対象月へ1件保存する
       if (!upsertMemberMetricHistory(tables, member.id, metricMonths, legacyMember)) {
-        upsertMemberMetric(tables, member.id, reportMonth, latestSales, latestFollowers);
+        upsertMemberMetric(tables, member.id, reportMonth, latestSales, latestFollowers, latestBreakdown);
       }
       replaceMemberSessions(tables, company.id, member.id, legacyMember.meetings);
     });
@@ -759,7 +807,12 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
     summaryRow.total_sales_amount = Number(legacyCompany.sales || 0);
     summaryRow.risk_member_count = activeMembers.filter((member) => member.evaluation_status === "F").length;
     summaryRow.source_kind = "manual";
-    summaryRow.source_ref = { source: "frontend", actor };
+    summaryRow.source_ref = {
+      source: "frontend",
+      actor,
+      // 会社単位の売上内訳（受講生の内訳の積み上げ）。全員未入力なら null のまま
+      sales: { tto: historyValue(legacyCompany.ttoSales), tts: historyValue(legacyCompany.ttsSales) }
+    };
     summaryRow.calculated_at = now;
 
     if (legacyCompany.progressReport) {
