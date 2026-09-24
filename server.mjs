@@ -959,6 +959,63 @@ function safeFilePath(pathname) {
   return filePath;
 }
 
+// 検索エンジン向けのファイル。公開してよいのはログイン画面（/）だけで、
+// API とデータは robots.txt で除外する。URL は PUBLIC_URL で差し替えられる（独自ドメイン移行用）。
+const DEFAULT_SITE_URL = "https://reskilling-portal.onrender.com";
+const siteUrl = (publicUrl || DEFAULT_SITE_URL).replace(/\/+$/, "");
+
+async function handleSeoRoute(pathname, response) {
+  if (pathname === "/robots.txt") {
+    response.writeHead(200, responseHeaders({ "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" }));
+    response.end([
+      "User-agent: *",
+      "Allow: /$",
+      "Allow: /assets/",
+      "Disallow: /api/",
+      "",
+      `Sitemap: ${siteUrl}/sitemap.xml`,
+      ""
+    ].join("\n"));
+    return true;
+  }
+  if (pathname === "/sitemap.xml") {
+    const lastmod = new Date().toISOString().slice(0, 10);
+    response.writeHead(200, responseHeaders({ "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" }));
+    response.end(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${siteUrl}/</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+`);
+    return true;
+  }
+  if (pathname === "/favicon.ico") {
+    // 検索結果に表示されるアイコン。48px の倍数の正方形である必要がある
+    try {
+      const icon = await readFile(join(root, "assets", "n2-icon-48.png"));
+      response.writeHead(200, responseHeaders({ "content-type": "image/png", "cache-control": "public, max-age=86400" }));
+      response.end(icon);
+    } catch {
+      response.writeHead(204, responseHeaders());
+      response.end();
+    }
+    return true;
+  }
+  // Google Search Console の所有権確認（HTMLファイル方式）。
+  // Render の環境変数 GOOGLE_SITE_VERIFICATION に「google1234abcd.html」の形のファイル名を入れる。
+  const verification = String(process.env.GOOGLE_SITE_VERIFICATION || "").trim();
+  if (/^google[0-9a-z]+\.html$/i.test(verification) && pathname === `/${verification}`) {
+    response.writeHead(200, responseHeaders({ "content-type": "text/html; charset=utf-8" }));
+    response.end(`google-site-verification: ${verification}`);
+    return true;
+  }
+  return false;
+}
+
 const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
@@ -974,11 +1031,7 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (url.pathname === "/favicon.ico") {
-      response.writeHead(204, responseHeaders());
-      response.end();
-      return;
-    }
+    if (await handleSeoRoute(url.pathname, response)) return;
 
     const filePath = safeFilePath(url.pathname);
     if (!filePath) {
@@ -987,9 +1040,18 @@ const server = createServer(async (request, response) => {
       return;
     }
     await stat(filePath);
+    // index.html の canonical / og:url 等を、sitemap と同じ公開URLに揃える
+    if (filePath === join(root, "index.html") && siteUrl !== DEFAULT_SITE_URL) {
+      const html = (await readFile(filePath, "utf8")).replaceAll(DEFAULT_SITE_URL, siteUrl);
+      response.writeHead(200, responseHeaders({ "content-type": mimeTypes[".html"], "cache-control": "no-store" }));
+      response.end(html);
+      return;
+    }
+    const isImage = [".png", ".jpg", ".jpeg"].includes(extname(filePath));
     response.writeHead(200, responseHeaders({
       "content-type": mimeTypes[extname(filePath)] || "application/octet-stream",
-      "cache-control": "no-store"
+      // 画像はキャッシュさせて表示を速くする（HTML/JS/CSS は更新を即反映するため従来どおり）
+      "cache-control": isImage ? "public, max-age=86400" : "no-store"
     }));
     createReadStream(filePath).pipe(response);
   } catch (error) {

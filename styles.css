@@ -4284,3 +4284,17 @@ td {
     font-size: 16px;
   }
 }
+
+/* ログイン画面：ブランド名（ロゴ）をページの見出しにし、「ログイン」は見た目だけ従来の大きさに保つ */
+.auth-logo-heading {
+  width: 100%;
+  margin: 0;
+  line-height: 0;
+}
+
+.auth-title {
+  margin-top: 6px;
+  font-size: clamp(27px, 3.1vw, 38px);
+  line-height: 1.15;
+  letter-spacing: 0;
+}

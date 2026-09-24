@@ -3,10 +3,54 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>N2 SKILLBASE</title>
-    <link rel="icon" type="image/png" href="./assets/n2-skillbase-mark.png" />
+    <title>N2 SKILLBASE｜法人向けSNS研修のクライアントポータル</title>
+    <meta name="description" content="N2 SKILLBASE（N2スキルベース）は、法人向けSNS研修の受講生の進捗・売上・MTG記録を企業ごとに確認できるクライアントポータルです。発行されたログインIDでご利用いただけます。" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="application-name" content="N2 SKILLBASE" />
+    <link rel="canonical" href="https://reskilling-portal.onrender.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="N2 SKILLBASE" />
+    <meta property="og:title" content="N2 SKILLBASE｜法人向けSNS研修のクライアントポータル" />
+    <meta property="og:description" content="法人向けSNS研修の受講生の進捗・売上・MTG記録を企業ごとに確認できるクライアントポータルです。" />
+    <meta property="og:url" content="https://reskilling-portal.onrender.com/" />
+    <meta property="og:image" content="https://reskilling-portal.onrender.com/assets/n2-skillbase-og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="N2 SKILLBASE｜法人向けSNS研修のクライアントポータル" />
+    <meta name="twitter:description" content="法人向けSNS研修の受講生の進捗・売上・MTG記録を企業ごとに確認できるクライアントポータルです。" />
+    <meta name="twitter:image" content="https://reskilling-portal.onrender.com/assets/n2-skillbase-og.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="./assets/n2-icon-48.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/n2-icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/n2-apple-touch-icon.png" />
     <meta name="theme-color" content="#022963" />
-    <link rel="stylesheet" href="./styles.css?v=20260924-company-layout" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://reskilling-portal.onrender.com/#website",
+            "name": "N2 SKILLBASE",
+            "alternateName": "N2スキルベース",
+            "url": "https://reskilling-portal.onrender.com/",
+            "inLanguage": "ja"
+          },
+          {
+            "@type": "WebApplication",
+            "name": "N2 SKILLBASE",
+            "url": "https://reskilling-portal.onrender.com/",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "description": "法人向けSNS研修の受講生の進捗・売上・MTG記録を企業ごとに確認できるクライアントポータル。",
+            "image": "https://reskilling-portal.onrender.com/assets/n2-skillbase-og.png",
+            "inLanguage": "ja"
+          }
+        ]
+      }
+    </script>
+    <link rel="stylesheet" href="./styles.css?v=20260924-seo" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -17,12 +61,14 @@
     <section class="auth-screen" id="authScreen" aria-label="ログイン">
       <div class="auth-card">
         <div class="auth-brand">
-          <img class="auth-logo" src="./assets/n2-skillbase-logo.png" alt="N2 SKILLBASE" />
-          <span>法人研修の意思決定ボード</span>
+          <h1 class="auth-logo-heading">
+            <img class="auth-logo" src="./assets/n2-skillbase-logo.png" alt="N2 SKILLBASE" width="451" height="160" />
+          </h1>
+          <span>法人向けSNS研修のクライアントポータル（法人研修の意思決定ボード）</span>
         </div>
         <div>
           <p class="eyebrow">Secure access</p>
-          <h1>ログイン</h1>
+          <h2 class="auth-title">ログイン</h2>
           <p class="auth-copy">発行されたログインIDとパスワードでログインしてください。</p>
         </div>
         <form class="auth-form" id="loginForm">
@@ -55,7 +101,7 @@
     <div class="app-shell">
       <aside class="sidebar" aria-label="サイドナビゲーション">
         <div class="brand">
-          <img class="brand-logo" src="./assets/n2-skillbase-mark.png" alt="" />
+          <img class="brand-logo" src="./assets/n2-skillbase-mark.png" alt="" width="157" height="128" />
           <div>
             <p>N2 <b>SKILLBASE</b></p>
             <span>Growth Intelligence</span>
@@ -722,6 +768,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260924-company-layout"></script>
+    <script src="./app.js?v=20260924-seo"></script>
   </body>
 </html>
