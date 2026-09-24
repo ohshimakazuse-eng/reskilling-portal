@@ -3801,3 +3801,292 @@ td {
   border-radius: 10px;
   padding: 12px;
 }
+
+/* ============================================================
+   全社管理（管理者画面）の見やすさ調整
+   ・数字（サマリー）を最初に、管理ツールは最下部にまとめる
+   ・会社ページと共有しているクラスは #admin で範囲を限定して上書きする
+   ============================================================ */
+
+/* 目次：各ブロックへ1タップで移動できる */
+.admin-jump {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 14px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-soft);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.admin-jump::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-jump a {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.admin-jump a:hover,
+.admin-jump a:focus-visible {
+  background: var(--soft-green);
+  color: var(--accent-2);
+}
+
+#admin > [id] {
+  scroll-margin-top: 76px;
+}
+
+#admin > .panel,
+#admin > .content-grid {
+  margin-bottom: 18px;
+}
+
+/* サマリー：数字は横1列、下に売上上位と会社別を2列で */
+#admin .admin-command-top {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#admin .admin-command-top .number-board {
+  grid-column: 1 / -1;
+  min-height: 0;
+  margin-top: 0;
+}
+
+#admin .number-board .focus-facts {
+  grid-template-columns: minmax(0, 1.9fr) repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#admin .number-board .focus-facts div,
+#admin .number-board .focus-facts div:nth-child(2) {
+  grid-column: auto;
+  min-height: 104px;
+  align-content: start;
+  gap: 2px;
+  padding: 12px 14px;
+  background: #ffffff;
+}
+
+#admin .number-board .focus-facts strong,
+#admin .number-board .focus-facts div:nth-child(2) strong {
+  font-size: 26px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+#admin .summary-fact small {
+  margin-top: 3px;
+}
+
+#admin .summary-fact.sales {
+  border-color: #bcd2fb;
+  background: linear-gradient(180deg, #f3f7ff 0%, #ffffff 100%);
+}
+
+#admin .summary-fact.sales strong {
+  font-size: 32px;
+  color: var(--accent);
+}
+
+#admin .summary-fact.danger {
+  border-color: #f0b9b4;
+  background: #fff7f6;
+}
+
+#admin .summary-fact.danger strong {
+  color: var(--danger);
+}
+
+#admin .command-top .focus-card:not(.number-board) {
+  min-height: 0;
+}
+
+/* 全社管理テーブル：数字の桁を揃え、行を読みやすく */
+#admin .admin-table-panel .admin-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+#admin .admin-table-panel .admin-table tbody tr:nth-child(even) td {
+  background: #f8faff;
+}
+
+#admin .admin-table-panel .admin-table tbody tr:hover td {
+  background: var(--soft-green);
+}
+
+/* 会社カード：ログイン情報はカードの下に1行で。カード本体の幅を削らない */
+#admin .company-card-wrap {
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+#admin .company-card-wrap .company-card {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+#admin .company-login {
+  margin-top: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: #f5f8fe;
+}
+
+#admin .company-login span {
+  grid-column: 1;
+}
+
+#admin .company-login code {
+  grid-column: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#admin .company-login .ghost-button.small {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin-top: 0;
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+/* 管理ツール：普段は使わない操作をまとめて最下部に置く */
+.admin-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sync-toolbar.tool-card {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  margin: 0;
+  box-shadow: none;
+  background: var(--surface-2);
+}
+
+.sync-toolbar.tool-card h2 {
+  font-size: 16px;
+}
+
+.sync-toolbar.tool-card .subtext {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.sync-toolbar.tool-card > button {
+  align-self: flex-start;
+}
+
+@media (max-width: 1280px) {
+  #admin .number-board .focus-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1040px) {
+  #admin .admin-command-top {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .admin-jump {
+    position: static;
+    margin: 10px 0 12px;
+  }
+
+  #admin .number-board .focus-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #admin .number-board .focus-facts div.sales {
+    grid-column: 1 / -1;
+  }
+
+  #admin .number-board .focus-facts div,
+  #admin .number-board .focus-facts div:nth-child(2) {
+    min-height: 0;
+  }
+
+  #admin .number-board .focus-facts strong,
+  #admin .number-board .focus-facts div:nth-child(2) strong {
+    font-size: 22px;
+  }
+
+  #admin .summary-fact.sales strong {
+    font-size: 26px;
+  }
+
+  .admin-tools-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* スマホ：サマリーの数字を早く見せるため、上部の日付と絞り込みを2列に詰める */
+@media (max-width: 420px) {
+  #admin .period-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  #admin .period-card {
+    padding: 10px 11px;
+  }
+
+  #admin .period-card strong {
+    font-size: 16px;
+  }
+
+  .top-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 会社カードの在籍・PR・構築・要確認は短い数字なので横4つに並べる */
+  #admin .company-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  #admin .company-metrics span {
+    min-height: 0;
+    padding: 7px 6px;
+  }
+
+  #admin .company-metrics b {
+    font-size: 17px;
+  }
+
+  /* 会社名は長いので1行まるごと使う */
+  .top-actions label:nth-child(2),
+  .top-actions .top-logout {
+    grid-column: 1 / -1;
+  }
+}
