@@ -1,20 +1,20 @@
 :root {
-  --bg: #eef3f7;
+  --bg: #eef2f8;
   --surface: #ffffff;
   --surface-2: #f6f8fb;
-  --ink: #0b2542;
+  --ink: #0a1f45;
   --muted: #52657a;
-  --line: #cbd6e2;
-  --accent: #0b3d66;
-  --accent-2: #f47a1f;
+  --line: #cbd5e6;
+  --accent: #022963;
+  --accent-2: #2970f8;
   --warn: #c45f12;
   --danger: #bd2f2a;
-  --soft-blue: #dceaf3;
-  --soft-green: #fff0df;
+  --soft-blue: #e9eef7;
+  --soft-green: #e3edff;
   --soft-red: #f9e1df;
   --soft-yellow: #ffe8c7;
-  --shadow: 0 18px 44px rgba(11, 37, 66, 0.12);
-  --shadow-soft: 0 8px 22px rgba(11, 37, 66, 0.08);
+  --shadow: 0 18px 44px rgba(2, 33, 80, 0.12);
+  --shadow-soft: 0 8px 22px rgba(2, 33, 80, 0.08);
 }
 
 * {
@@ -24,7 +24,7 @@
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, #dce8f2 0, #f8fafc 260px, var(--bg) 520px),
+    linear-gradient(180deg, #dde7f8 0, #f8fafc 260px, var(--bg) 520px),
     var(--bg);
   color: var(--ink);
   font-family: Inter, "Noto Sans JP", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -44,8 +44,8 @@ select {
   place-items: center;
   padding: 24px;
   background:
-    linear-gradient(135deg, rgba(8, 28, 50, 0.95), rgba(11, 61, 102, 0.76) 58%, rgba(244, 122, 31, 0.42)),
-    #081c32;
+    linear-gradient(135deg, rgba(1, 20, 52, 0.96), rgba(2, 41, 99, 0.82) 58%, rgba(41, 112, 248, 0.5)),
+    #021a40;
 }
 
 .auth-screen.hidden {
@@ -116,8 +116,24 @@ select {
   box-shadow: 0 26px 80px rgba(15, 23, 42, 0.32);
 }
 
-.auth-brand p {
-  color: var(--ink);
+/* ログイン画面は白いカードなのでロゴをそのまま（ワードマーク込み）で見せる */
+.auth-brand {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.auth-logo {
+  width: 210px;
+  max-width: 70%;
+  height: auto;
+  display: block;
+}
+
+.auth-brand span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .auth-copy {
@@ -174,8 +190,8 @@ select {
   height: 100vh;
   padding: 22px 18px;
   background:
-    linear-gradient(180deg, rgba(244, 122, 31, 0.13), rgba(11, 61, 102, 0.22)),
-    #081c32;
+    linear-gradient(180deg, rgba(41, 112, 248, 0.16), rgba(2, 41, 99, 0.3)),
+    #021a40;
   color: #ffffff;
   display: flex;
   flex-direction: column;
@@ -207,9 +223,10 @@ select {
   height: 52px;
   flex: 0 0 52px;
   object-fit: contain;
-  border-radius: 10px;
+  padding: 7px;
+  border-radius: 12px;
   background: #ffffff;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
 }
 
 .brand p,
@@ -225,7 +242,13 @@ p {
 .brand p {
   font-size: 16px;
   font-weight: 900;
-  letter-spacing: 0;
+  letter-spacing: 0.02em;
+}
+
+/* ロゴのワードマークと同じく「SKILLBASE」をブランドの青で */
+.brand p b {
+  color: #7ea9ff;
+  font-weight: 900;
 }
 
 .brand span,
@@ -378,6 +401,7 @@ input[type="search"],
 input[type="date"],
 input[type="number"],
 input[type="text"],
+input[type="password"],
 textarea {
   min-height: 40px;
   border: 1px solid var(--line);
@@ -391,8 +415,8 @@ textarea {
 select:focus,
 input:focus,
 textarea:focus {
-  outline: 3px solid rgba(244, 122, 31, 0.18);
-  border-color: rgba(244, 122, 31, 0.55);
+  outline: 3px solid rgba(41, 112, 248, 0.18);
+  border-color: rgba(41, 112, 248, 0.55);
 }
 
 textarea {
@@ -844,7 +868,7 @@ button.simple-row:hover {
 }
 
 .focus-member:hover {
-  border-color: rgba(244, 122, 31, 0.42);
+  border-color: rgba(41, 112, 248, 0.42);
   background: #f3f7ff;
   transform: translateY(-1px);
   text-decoration: none;
@@ -917,7 +941,7 @@ button.simple-row:hover {
 }
 
 .company-rank-row:hover {
-  border-color: rgba(244, 122, 31, 0.42);
+  border-color: rgba(41, 112, 248, 0.42);
   background: #f3f7ff;
   transform: translateY(-1px);
 }
@@ -1247,7 +1271,7 @@ button.simple-row:hover {
 }
 
 .pill {
-  border: 1px solid rgba(11, 61, 102, 0.14);
+  border: 1px solid rgba(2, 41, 99, 0.14);
   background: var(--soft-blue);
   color: var(--accent);
 }
@@ -1286,11 +1310,11 @@ button.simple-row:hover {
   min-width: 18px;
   max-width: 42px;
   border-radius: 6px 6px 0 0;
-  background: linear-gradient(180deg, #0b3d66, #5d8ead);
+  background: linear-gradient(180deg, #022963, #4f6fa8);
 }
 
 .bar.current {
-  background: linear-gradient(180deg, #f47a1f, #ffc075);
+  background: linear-gradient(180deg, #2970f8, #8db4fb);
 }
 
 .bar.empty {
@@ -1299,7 +1323,7 @@ button.simple-row:hover {
 }
 
 .bar.current.empty {
-  background: linear-gradient(180deg, #f47a1f, #ffc075);
+  background: linear-gradient(180deg, #2970f8, #8db4fb);
   opacity: 0.45;
 }
 
@@ -1580,15 +1604,15 @@ button.simple-row:hover {
   border: 0;
   border-radius: 8px;
   padding: 0 16px;
-  background: linear-gradient(180deg, #ff8a2a, var(--accent-2));
+  background: linear-gradient(180deg, #4a86fa, var(--accent-2));
   color: #ffffff;
   font-weight: 850;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(244, 122, 31, 0.24);
+  box-shadow: 0 8px 18px rgba(41, 112, 248, 0.24);
 }
 
 .primary-button:hover {
-  background: linear-gradient(180deg, #ff9a45, #d85f0f);
+  background: linear-gradient(180deg, #5b93fb, #1b58d4);
 }
 
 .primary-button.small {
@@ -1831,7 +1855,7 @@ td {
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(11, 61, 102, 0.08), rgba(244, 122, 31, 0.06)),
+    linear-gradient(135deg, rgba(2, 41, 99, 0.08), rgba(41, 112, 248, 0.06)),
     #ffffff;
   box-shadow: var(--shadow-soft);
 }
@@ -2493,7 +2517,7 @@ td {
 }
 
 .account-open-button:hover {
-  background: #082f52;
+  background: #01214f;
 }
 
 .account-link-card em {
@@ -2746,11 +2770,11 @@ td {
   max-width: 30px;
   min-width: 8px;
   border-radius: 6px 6px 0 0;
-  background: linear-gradient(180deg, #f47a1f, #ffc075);
+  background: linear-gradient(180deg, #2970f8, #8db4fb);
 }
 
 .mini-chart.sales .mini-bar {
-  background: linear-gradient(180deg, #0b3d66, #5d8ead);
+  background: linear-gradient(180deg, #022963, #4f6fa8);
 }
 
 .meeting-list {
@@ -3019,7 +3043,8 @@ td {
     width: 38px;
     height: 38px;
     flex-basis: 38px;
-    border-radius: 8px;
+    padding: 5px;
+    border-radius: 9px;
   }
 
   .brand p {
@@ -3399,6 +3424,7 @@ td {
   input[type="date"],
   input[type="number"],
   input[type="text"],
+  input[type="password"],
   textarea {
     width: 100%;
     min-width: 0;
