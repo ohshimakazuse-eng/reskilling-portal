@@ -1407,18 +1407,21 @@ function renderAdminCommandTop() {
   const topCompanySales = Number(topCompanies[0]?.sales || 0);
   const allBreakdown = sumCompanyBreakdown(list);
 
+  const breakdownLine = `TTO ${allBreakdown.tto === null ? "未入力" : money(allBreakdown.tto)} / TTS ${allBreakdown.tts === null ? "未入力" : money(allBreakdown.tts)}`;
+  const earningCompanies = list.filter((company) => Number(company.sales || 0) > 0).length;
+  // 1行に並べて一目で読めるようにする。売上は合計を大きく、内訳・社内外の内訳は補足行に
   $("#adminFocusFacts").innerHTML = [
-    ["クライアント", `${clientCount}社`, `社内管理 ${list.length - clientCount}社`],
-    ["在籍", `${totalMembers}名`, `PR ${prCount}名 / 構築 ${buildCount}名`],
-    ["当月売上", `<span class="split-sales"><b>合計 ${money(totalSales)}</b><b>TTO ${allBreakdown.tto === null ? "未入力" : money(allBreakdown.tto)}</b><b>TTS ${allBreakdown.tts === null ? "未入力" : money(allBreakdown.tts)}</b></span>`, `NH+VV ${money(internalSales)} / その他 ${money(clientSales)} / 売上発生 ${list.filter((company) => Number(company.sales || 0) > 0).length}社`],
-    ["平均進捗", `${avg}%`, `新規 ${newCount}名`],
-    ["当月1000達成", `${f1000Count}名`, "フォロワー1000にチェック済み"],
-    ["要確認", `${totalRisk}名`, "確認優先の受講生"]
-  ].map(([label, value, caption]) => `
-    <div class="summary-fact">
+    { label: "当月売上", value: money(totalSales), notes: [breakdownLine, `NH+VV ${money(internalSales)} / その他 ${money(clientSales)} / 売上発生 ${earningCompanies}社`], tone: "sales" },
+    { label: "在籍", value: `${totalMembers}名`, notes: [`PR ${prCount}名 / 構築 ${buildCount}名`] },
+    { label: "要確認", value: `${totalRisk}名`, notes: ["確認優先の受講生"], tone: totalRisk > 0 ? "danger" : "" },
+    { label: "平均進捗", value: `${avg}%`, notes: [`新規 ${newCount}名`] },
+    { label: "当月1000達成", value: `${f1000Count}名`, notes: ["フォロワー1000にチェック済み"] },
+    { label: "クライアント", value: `${clientCount}社`, notes: [`社内管理 ${list.length - clientCount}社`] }
+  ].map(({ label, value, notes, tone = "" }) => `
+    <div class="summary-fact ${tone}">
       <span>${label}</span>
       <strong>${value}</strong>
-      <small>${caption}</small>
+      ${notes.map((note) => `<small>${note}</small>`).join("")}
     </div>
   `).join("");
   $("#adminSalesLeaders").innerHTML = renderSalesLeaderRows(leaders, "全社で売上登録はありません。");
@@ -2552,7 +2555,7 @@ function renderCompanyGrid() {
       ${canManage ? `
         <div class="company-login">
           <span>クライアント用ログイン${login.auto ? `<em class="login-auto-tag">自動発行</em>` : ""}</span>
-          <code>ID ${escapeHtml(login.loginId)} / PW ${escapeHtml(login.password)}</code>
+          <code>ID ${escapeHtml(login.loginId)}　PW ${escapeHtml(login.password)}</code>
           <button class="ghost-button small" data-copy-login="${escapeHtml(company.id)}" type="button">コピー</button>
         </div>
       ` : ""}

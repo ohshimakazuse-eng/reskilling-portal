@@ -6,7 +6,7 @@
     <title>N2 SKILLBASE</title>
     <link rel="icon" type="image/png" href="./assets/n2-skillbase-mark.png" />
     <meta name="theme-color" content="#022963" />
-    <link rel="stylesheet" href="./styles.css?v=20260924-n2-brand" />
+    <link rel="stylesheet" href="./styles.css?v=20260924-admin-layout" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -119,43 +119,14 @@
 
         <section class="view active" id="admin">
           <section class="period-strip" id="adminPeriodStrip"></section>
-          <section class="sync-toolbar" id="sheetSyncPanel">
-            <div>
-              <p class="eyebrow">正本同期</p>
-              <h2>最新スプシを本番DBへ反映</h2>
-              <p class="subtext" id="sheetSyncStatus">管理者のみ実行できます。</p>
-            </div>
-            <button class="primary-button small" id="syncBundledData" type="button">同期を開始</button>
-          </section>
-
-          <section class="sync-toolbar" id="metricMigrationPanel">
-            <div>
-              <p class="eyebrow">実績データの修復</p>
-              <h2>いま入っている数字を当月の実績にする</h2>
-              <p class="subtext" id="metricMigrationStatus">旧仕様では月に関係なく1件の実績を上書きしていました。実行すると現在の数字が当月の実績として記録され、先月以前は未登録に戻ります。一度だけ実行してください。</p>
-            </div>
-            <button class="ghost-button small" id="migrateMetricMonths" type="button">当月に付け替える</button>
-          </section>
-
-          <section class="sync-toolbar" id="enrollmentImportPanel">
-            <div>
-              <p class="eyebrow">在籍推移の取り込み</p>
-              <h2>受講生リストから月別在籍数を取り込む</h2>
-              <p class="subtext" id="enrollmentImportStatus">受講生リスト(Excel)の各月の在籍人数を、各社の在籍推移グラフへ反映します。記録のある月だけ上書きします。</p>
-            </div>
-            <button class="ghost-button small" id="importEnrollmentHistory" type="button">在籍推移を取り込む</button>
-          </section>
-
-          <section class="sync-toolbar" id="aiModelPanel">
-            <div>
-              <p class="eyebrow">AI設定</p>
-              <h2>進捗報告に使うAIモデル</h2>
-              <p class="subtext" id="aiModelStatus">RenderのOPENAI_MODELで指定します。利用できるモデルIDはここで確認できます。</p>
-            </div>
-            <button class="ghost-button small" id="checkAiModels" type="button">利用できるモデルを確認</button>
-          </section>
-
-          <section class="exec-focus command-top admin-command-top">
+          <nav class="admin-jump" aria-label="全社管理の目次">
+            <a href="#adminSummary">全社サマリー</a>
+            <a href="#adminTable">全社管理テーブル</a>
+            <a href="#adminPortfolio">会社別マイページ</a>
+            <a href="#adminCreate">法人を追加</a>
+            <a href="#adminTools">管理ツール</a>
+          </nav>
+          <section class="exec-focus command-top admin-command-top" id="adminSummary">
             <article class="focus-card number-board">
               <p class="eyebrow">全社サマリー</p>
               <div class="focus-facts" id="adminFocusFacts"></div>
@@ -174,45 +145,7 @@
             </article>
           </section>
 
-          <div class="content-grid single admin-portfolio-grid">
-            <section class="panel wide">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Company portfolio</p>
-                  <h2>会社別マイページ一覧</h2>
-                </div>
-                <span class="pill">管理者専用</span>
-              </div>
-              <div class="company-grid" id="companyGrid"></div>
-            </section>
-          </div>
-
-          <section class="panel company-create-panel">
-            <div class="panel-header">
-              <div>
-                <p class="eyebrow">New client</p>
-                <h2>新規法人を追加</h2>
-              </div>
-              <span class="pill">追加後にマイページ自動発行</span>
-            </div>
-            <form class="ops-form company-create-form" id="addCompanyForm">
-              <label class="form-field">
-                <span>会社名</span>
-                <input id="newCompanyName" type="text" placeholder="例: 株式会社サンプル" required />
-              </label>
-              <label class="form-field">
-                <span>ログインID</span>
-                <input id="newCompanyCode" type="text" pattern="[a-z0-9_-]+" placeholder="例: sample" required />
-              </label>
-              <label class="form-field">
-                <span>初期在籍人数</span>
-                <input id="newCompanyEnrollment" type="number" min="0" value="0" />
-              </label>
-              <button class="primary-button" type="submit">法人を追加</button>
-            </form>
-          </section>
-
-          <section class="panel">
+          <section class="panel admin-table-panel" id="adminTable">
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Management table</p>
@@ -238,6 +171,88 @@
                 </thead>
                 <tbody id="companyTable"></tbody>
               </table>
+            </div>
+          </section>
+
+          <div class="content-grid single admin-portfolio-grid" id="adminPortfolio">
+            <section class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Company portfolio</p>
+                  <h2>会社別マイページ一覧</h2>
+                </div>
+                <span class="pill">管理者専用</span>
+              </div>
+              <div class="company-grid" id="companyGrid"></div>
+            </section>
+          </div>
+
+          <section class="panel company-create-panel" id="adminCreate">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">New client</p>
+                <h2>新規法人を追加</h2>
+              </div>
+              <span class="pill">追加後にマイページ自動発行</span>
+            </div>
+            <form class="ops-form company-create-form" id="addCompanyForm">
+              <label class="form-field">
+                <span>会社名</span>
+                <input id="newCompanyName" type="text" placeholder="例: 株式会社サンプル" required />
+              </label>
+              <label class="form-field">
+                <span>ログインID</span>
+                <input id="newCompanyCode" type="text" pattern="[a-z0-9_-]+" placeholder="例: sample" required />
+              </label>
+              <label class="form-field">
+                <span>初期在籍人数</span>
+                <input id="newCompanyEnrollment" type="number" min="0" value="0" />
+              </label>
+              <button class="primary-button" type="submit">法人を追加</button>
+            </form>
+          </section>
+
+          <section class="panel admin-tools" id="adminTools">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Admin tools</p>
+                <h2>管理ツール</h2>
+              </div>
+              <span class="pill">必要な時だけ実行</span>
+            </div>
+            <div class="admin-tools-grid">
+              <section class="sync-toolbar tool-card" id="sheetSyncPanel">
+                <div>
+                  <p class="eyebrow">正本同期</p>
+                  <h2>最新スプシを本番DBへ反映</h2>
+                  <p class="subtext" id="sheetSyncStatus">管理者のみ実行できます。</p>
+                </div>
+                <button class="primary-button small" id="syncBundledData" type="button">同期を開始</button>
+              </section>
+              <section class="sync-toolbar tool-card" id="metricMigrationPanel">
+                <div>
+                  <p class="eyebrow">実績データの修復</p>
+                  <h2>いま入っている数字を当月の実績にする</h2>
+                  <p class="subtext" id="metricMigrationStatus">旧仕様では月に関係なく1件の実績を上書きしていました。実行すると現在の数字が当月の実績として記録され、先月以前は未登録に戻ります。一度だけ実行してください。</p>
+                </div>
+                <button class="ghost-button small" id="migrateMetricMonths" type="button">当月に付け替える</button>
+              </section>
+              <section class="sync-toolbar tool-card" id="enrollmentImportPanel">
+                <div>
+                  <p class="eyebrow">在籍推移の取り込み</p>
+                  <h2>受講生リストから月別在籍数を取り込む</h2>
+                  <p class="subtext" id="enrollmentImportStatus">受講生リスト(Excel)の各月の在籍人数を、各社の在籍推移グラフへ反映します。記録のある月だけ上書きします。</p>
+                </div>
+                <button class="ghost-button small" id="importEnrollmentHistory" type="button">在籍推移を取り込む</button>
+              </section>
+              <section class="sync-toolbar tool-card" id="aiModelPanel">
+                <div>
+                  <p class="eyebrow">AI設定</p>
+                  <h2>進捗報告に使うAIモデル</h2>
+                  <p class="subtext" id="aiModelStatus">RenderのOPENAI_MODELで指定します。利用できるモデルIDはここで確認できます。</p>
+                </div>
+                <button class="ghost-button small" id="checkAiModels" type="button">利用できるモデルを確認</button>
+              </section>
             </div>
           </section>
         </section>
@@ -702,6 +717,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260924-n2-brand"></script>
+    <script src="./app.js?v=20260924-admin-layout"></script>
   </body>
 </html>
