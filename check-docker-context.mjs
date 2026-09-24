@@ -1,4 +1,22 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+
+// Render は GitHub の内容からビルドするため、手元にあっても git に入っていないファイルは本番に届かない。
+// .gitignore に一致し、かつ追跡もされていないファイルを検出する（git が無い環境では判定しない）。
+function notInGit(path) {
+  try {
+    if (existsSync(path) && statSync(path).isDirectory()) return false;
+    execFileSync("git", ["ls-files", "--error-unmatch", path], { stdio: "ignore" });
+    return false;
+  } catch {
+    try {
+      execFileSync("git", ["check-ignore", "-q", path], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
 
 // .dockerignore の評価（後勝ち。! で除外解除）
 const rules = readFileSync(".dockerignore", "utf8").split("\n")
@@ -34,9 +52,10 @@ console.log("Dockerfile が COPY するファイル:");
 for (const file of copied) {
   const missing = !existsSync(file);
   const ignored = isExcluded(file);
-  const bad = missing || ignored;
+  const untracked = !missing && notInGit(file);
+  const bad = missing || ignored || untracked;
   if (bad) ok = false;
-  console.log(`  ${bad ? "NG" : "OK"}  ${file}${missing ? "  <- ファイルが存在しない" : ""}${ignored ? "  <- .dockerignore で除外されている" : ""}`);
+  console.log(`  ${bad ? "NG" : "OK"}  ${file}${missing ? "  <- ファイルが存在しない" : ""}${ignored ? "  <- .dockerignore で除外されている" : ""}${untracked ? "  <- .gitignore で除外され git に入っていない" : ""}`);
 }
 // index.html が読み込むローカルファイルが COPY 対象に含まれているか
 // （含まれていないと本番だけ 404 になり、機能が静かに死ぬ）
@@ -55,9 +74,10 @@ console.log("\nindex.html が読み込むローカルファイル:");
 for (const path of [...referenced].sort()) {
   const inImage = copiedSet.has(path) || [...copiedSet].some((c) => path.startsWith(`${c}/`));
   const missing = !existsSync(path);
-  const bad = missing || !inImage;
+  const untracked = !missing && notInGit(path);
+  const bad = missing || !inImage || untracked;
   if (bad) ok = false;
-  console.log(`  ${bad ? "NG" : "OK"}  ${path}${missing ? "  <- ファイルが存在しない" : ""}${!missing && !inImage ? "  <- Dockerfile の COPY に入っていない" : ""}`);
+  console.log(`  ${bad ? "NG" : "OK"}  ${path}${missing ? "  <- ファイルが存在しない" : ""}${!missing && !inImage ? "  <- Dockerfile の COPY に入っていない" : ""}${untracked ? "  <- .gitignore で除外され git に入っていない" : ""}`);
 }
 
 console.log(ok ? "\nビルドコンテキスト: 問題なし" : "\nビルドコンテキスト: このままだとビルドが失敗します");

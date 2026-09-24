@@ -20,6 +20,8 @@ internal-admin-credentials.md
 # Generated reports/assets not needed for production deploy
 manuals/
 *.png
+# 画面で使うロゴ等は本番へ配信するため追跡する
+!assets/*.png
 latest-google-sheets-sync-report.md
 latest-sheet-reconciliation-report.md
 
