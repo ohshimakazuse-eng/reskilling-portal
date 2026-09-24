@@ -1558,19 +1558,27 @@ function renderExecutiveFocus() {
   const salesLeaders = salesLeadersForCompany(company, 5);
 
   const breakdown = companyBreakdown(company);
+  const risk = riskCount(company);
+  const yenOrBlank = (value) => (value === null ? "未入力" : money(value));
+  // 全社管理と同じく横1列の数字タイルにする。売上は合計を大きく、TTO/TTSを並べて添える
   $("#focusConclusionFacts").innerHTML = [
-    ["在籍", `${currentEnrollment(company)}名`],
-    ["合計売上", money(company.sales)],
-    ["TTO売上", breakdown.tto === null ? "未入力" : money(breakdown.tto)],
-    ["TTS売上", breakdown.tts === null ? "未入力" : money(breakdown.tts)],
-    ["平均進捗", `${avg}%`],
-    ["当月1000達成", `${f1000Count}名`],
-    ["要確認", `${riskCount(company)}名`],
-    ["PR", `${prCount}名`]
-  ].map(([label, value]) => `
-    <div>
+    {
+      label: "当月売上",
+      value: money(company.sales),
+      extra: `<span class="fact-split"><em>TTO売上<b>${yenOrBlank(breakdown.tto)}</b></em><em>TTS売上<b>${yenOrBlank(breakdown.tts)}</b></em></span>`,
+      tone: "sales"
+    },
+    { label: "在籍", value: `${currentEnrollment(company)}名`, note: `PR ${prCount}名 / 構築 ${members.filter((member) => member.stage === "構築").length}名` },
+    { label: "要確認", value: `${risk}名`, note: "個別に状況を確認する受講生", tone: risk > 0 ? "danger" : "" },
+    { label: "平均進捗", value: `${avg}%`, note: "完了項目ベース" },
+    { label: "当月1000達成", value: `${f1000Count}名`, note: "フォロワー1000にチェック済み" },
+    { label: "PR", value: `${prCount}名`, note: "案件獲得フェーズ" }
+  ].map(({ label, value, note = "", extra = "", tone = "" }) => `
+    <div class="summary-fact ${tone}">
       <span>${label}</span>
       <strong>${value}</strong>
+      ${extra}
+      ${note ? `<small>${note}</small>` : ""}
     </div>
   `).join("");
 

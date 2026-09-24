@@ -4090,3 +4090,197 @@ td {
     grid-column: 1 / -1;
   }
 }
+
+/* ============================================================
+   会社ページ（各社マイページ）の見やすさ調整
+   ・サマリーを横1列 → 今月の進捗 → 売上上位＋フェーズ・評価 → 在籍推移
+   ・#dashboard で範囲を限定し、他の画面には影響させない
+   ============================================================ */
+
+/* 見出しの「マイページ」が途中で折り返さないように（日本語は単語単位で改行） */
+#pageTitle {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+#dashboard > [id] {
+  scroll-margin-top: 76px;
+}
+
+#dashboard > section,
+#dashboard > div {
+  margin-bottom: 16px;
+}
+
+#dashboard > .page-jump {
+  margin-top: 0;
+}
+
+/* 会社サマリー：数字6つを横1列に */
+#dashboard .dashboard-command-top {
+  grid-template-columns: 1fr;
+}
+
+#dashboard .dashboard-command-top .number-board {
+  min-height: 0;
+  margin-top: 0;
+}
+
+#dashboard .number-board .focus-facts {
+  grid-template-columns: minmax(0, 2fr) repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#dashboard .number-board .focus-facts div,
+#dashboard .number-board .focus-facts div:nth-child(2) {
+  grid-column: auto;
+  min-height: 108px;
+  align-content: start;
+  gap: 2px;
+  padding: 12px 14px;
+  background: #ffffff;
+}
+
+#dashboard .number-board .focus-facts strong,
+#dashboard .number-board .focus-facts div:nth-child(2) strong {
+  font-size: 26px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+#dashboard .summary-fact small {
+  margin-top: 3px;
+}
+
+#dashboard .summary-fact.sales {
+  border-color: #bcd2fb;
+  background: linear-gradient(180deg, #f3f7ff 0%, #ffffff 100%);
+}
+
+#dashboard .summary-fact.sales strong {
+  font-size: 32px;
+  color: var(--accent);
+}
+
+#dashboard .summary-fact.danger {
+  border-color: #f0b9b4;
+  background: #fff7f6;
+}
+
+#dashboard .summary-fact.danger strong {
+  color: var(--danger);
+}
+
+/* 合計売上の下に TTO / TTS を並べる */
+#dashboard .focus-facts .fact-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+#dashboard .focus-facts .fact-split em {
+  display: grid;
+  gap: 1px;
+  padding: 6px 8px;
+  border: 1px solid #d7e3f7;
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+#dashboard .focus-facts .fact-split b {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 今月の進捗：本文を読みやすい行長・行間に */
+#dashboard .exec-message {
+  max-width: 62em;
+}
+
+#dashboard .exec-insights > * {
+  line-height: 1.7;
+}
+
+/* 売上上位（左・縦長）＋フェーズ構成と評価分布（右に2段） */
+.company-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 14px;
+}
+
+.company-detail-grid .leaders-card {
+  grid-row: 1 / span 2;
+  align-self: start;
+  min-height: 0;
+}
+
+.company-detail-grid > .panel {
+  margin: 0;
+}
+
+@media (max-width: 1280px) {
+  #dashboard .number-board .focus-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #dashboard .number-board .focus-facts div.sales {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1040px) {
+  .company-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .company-detail-grid .leaders-card {
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 680px) {
+  #dashboard .number-board .focus-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #dashboard .number-board .focus-facts div,
+  #dashboard .number-board .focus-facts div:nth-child(2) {
+    min-height: 0;
+  }
+
+  #dashboard .number-board .focus-facts strong,
+  #dashboard .number-board .focus-facts div:nth-child(2) strong {
+    font-size: 22px;
+  }
+
+  #dashboard .summary-fact.sales strong {
+    font-size: 26px;
+  }
+
+  #dashboard .exec-message {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 420px) {
+  #dashboard .period-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  #dashboard .period-card {
+    padding: 10px 11px;
+  }
+
+  #dashboard .period-card strong {
+    font-size: 16px;
+  }
+}
