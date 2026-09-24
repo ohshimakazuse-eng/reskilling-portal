@@ -6,7 +6,7 @@
     <title>N2 SKILLBASE</title>
     <link rel="icon" type="image/png" href="./assets/n2-skillbase-mark.png" />
     <meta name="theme-color" content="#022963" />
-    <link rel="stylesheet" href="./styles.css?v=20260924-admin-layout" />
+    <link rel="stylesheet" href="./styles.css?v=20260924-company-layout" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -259,18 +259,18 @@
 
         <section class="view" id="dashboard">
           <section class="period-strip" id="companyPeriodStrip"></section>
-
-          <section class="exec-focus command-top dashboard-command-top">
+          <nav class="admin-jump page-jump" aria-label="会社ページの目次">
+            <a href="#companySummary">会社サマリー</a>
+            <a href="#execSummary">今月の進捗</a>
+            <a href="#companyBreakdown">売上上位・フェーズ・評価</a>
+            <a href="#companyTrend">在籍推移</a>
+          </nav>
+          <section class="exec-focus command-top dashboard-command-top" id="companySummary">
             <article class="focus-card number-board">
               <p class="eyebrow">会社サマリー</p>
               <div class="focus-facts" id="focusConclusionFacts"></div>
             </article>
 
-            <article class="focus-card">
-              <p class="eyebrow">売上</p>
-              <h2>売上上位の受講生</h2>
-              <div class="focus-list" id="focusPriorityList"></div>
-            </article>
           </section>
 
           <section class="exec-summary" id="execSummary">
@@ -330,7 +330,12 @@
             </div>
           </section>
 
-          <div class="exec-grid">
+          <div class="company-detail-grid" id="companyBreakdown">
+            <article class="focus-card leaders-card">
+              <p class="eyebrow">売上</p>
+              <h2>売上上位の受講生</h2>
+              <div class="focus-list" id="focusPriorityList"></div>
+            </article>
             <section class="panel">
               <div class="panel-header">
                 <div>
@@ -355,7 +360,7 @@
             </section>
           </div>
 
-          <div class="content-grid single">
+          <div class="content-grid single" id="companyTrend">
             <section class="panel wide">
               <div class="panel-header">
                 <div>
@@ -717,6 +722,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260924-admin-layout"></script>
+    <script src="./app.js?v=20260924-company-layout"></script>
   </body>
 </html>
