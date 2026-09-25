@@ -1929,6 +1929,8 @@ function renderPipeline() {
 
 function renderMembers() {
   const rows = filteredMembers();
+  const countPill = $("#memberCountPill");
+  if (countPill) countPill.textContent = `${rows.length}名`;
   if (!rows.length) {
     $("#memberTable").innerHTML = `
       <tr>
