@@ -5017,3 +5017,303 @@ td {
     min-width: 0;
   }
 }
+
+/* ============================================================
+   横に広い画面でも間延びしないよう、本文の最大幅を決める
+   ============================================================ */
+.main {
+  width: 100%;
+  max-width: 1720px;
+  justify-self: center;
+}
+
+/* ============================================================
+   ランキング行（売上上位の受講生／在籍と売上）
+   名前・バー・金額を1行に並べ、視線の移動を短くする
+   ============================================================ */
+.focus-member.rank-row,
+.company-rank-row.rank-row {
+  grid-template-columns: 30px minmax(0, 1.25fr) minmax(70px, 1fr) minmax(118px, auto);
+  align-items: center;
+  gap: 14px;
+  min-height: 0;
+  padding: 10px 12px;
+}
+
+.rank-row .rank-who {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rank-row .rank-who strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rank-row .rank-who small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rank-row .rank-who small b {
+  margin-right: 8px;
+  font-weight: 800;
+}
+
+.rank-row .rank-bar i {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: #e6ecf6;
+  overflow: hidden;
+}
+
+.rank-row .rank-bar i b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+.rank-row .rank-amount {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  color: var(--accent);
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rank-row .rank-amount .sales-split {
+  text-align: right;
+}
+
+.rank-row .pc-status {
+  flex: 0 0 auto;
+  font-size: 10px;
+}
+
+.company-rank-list {
+  display: grid;
+  gap: 8px;
+}
+
+/* ============================================================
+   全社管理テーブル（5列に整理）
+   ============================================================ */
+.table-legend {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.table-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin: 0 3px 0 8px;
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+
+.seg-new { background: #9db8e8; }
+.seg-build { background: #4f6fa8; }
+.seg-pr { background: var(--accent-2); }
+
+.company-overview-table {
+  min-width: 820px;
+}
+
+.company-overview-table th {
+  white-space: nowrap;
+}
+
+.company-overview-table .sub-sorts {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+
+.company-overview-table .sub-sorts .table-sort {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.company-overview-table td {
+  padding: 11px 14px;
+  vertical-align: middle;
+}
+
+.company-overview-table td > div.cell-company {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+}
+
+/* 見出し：主ボタンと小さい並び替えボタンを横に並べる（主ボタンが幅いっぱいに広がらないように） */
+.company-overview-table th .table-sort {
+  width: auto;
+  justify-content: flex-start;
+}
+
+.company-overview-table .sub-sorts .table-sort::after {
+  font-size: 9px;
+}
+
+.company-overview-table .member-name {
+  font-weight: 900;
+}
+
+.company-overview-table td > div {
+  display: grid;
+  gap: 3px;
+}
+
+.company-overview-table td > div > b {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.company-overview-table td > div > b small {
+  margin-left: 1px;
+  font-size: 11px;
+}
+
+.company-overview-table td > div > small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stage-bar {
+  display: flex;
+  width: 140px;
+  height: 7px;
+  border-radius: 999px;
+  background: #eef2f8;
+  overflow: hidden;
+}
+
+.stage-bar i {
+  display: block;
+  height: 100%;
+}
+
+.cell-progress .table-progress,
+.cell-sales .table-progress {
+  width: 140px;
+  margin: 0;
+}
+
+.cell-sales .table-progress b {
+  background: var(--accent-2);
+}
+
+.cell-sales > b {
+  color: var(--accent) !important;
+}
+
+.cell-risk.danger > b { color: var(--danger) !important; }
+.cell-risk.warn > b { color: #9a5b00 !important; }
+
+/* 在籍0名・売上0円の会社は薄く表示（データはそのまま） */
+.company-row.is-inactive td {
+  opacity: 0.55;
+}
+
+.company-row.is-inactive:hover td {
+  opacity: 1;
+}
+
+@media (max-width: 680px) {
+  .focus-member.rank-row,
+  .company-rank-row.rank-row {
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    gap: 6px 10px;
+  }
+
+  .rank-row .rank-bar {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+
+  .table-legend {
+    display: none;
+  }
+}
+
+.rank-row .rank-bar i,
+.company-rank-row.rank-row .rank-bar i {
+  width: 100%;
+}
+
+.rank-row,
+.rank-row:hover,
+.rank-row * {
+  text-decoration: none !important;
+}
+
+/* 会社名は長いので、在籍と売上の行はバーを名前の下に置き名前を省略させない */
+.company-rank-row.rank-row {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  row-gap: 6px;
+}
+
+.company-rank-row.rank-row .focus-rank {
+  grid-row: 1 / span 2;
+}
+
+.company-rank-row.rank-row .rank-bar {
+  grid-column: 2 / -1;
+  grid-row: 2;
+}
+
+.company-rank-row.rank-row .rank-who strong {
+  white-space: normal;
+  flex-wrap: wrap;
+}
+
+/* 全社管理テーブル：会社名は折り返して隣の列に重ならないように */
+.company-overview-table .cell-company {
+  flex-wrap: wrap;
+}
+
+.company-overview-table .member-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 680px) {
+  .company-overview-table td > div.cell-company {
+    min-width: 150px;
+    gap: 4px;
+  }
+
+  .company-overview-table {
+    min-width: 760px;
+  }
+}

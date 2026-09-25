@@ -50,7 +50,7 @@
         ]
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=20260925-ui-all" />
+    <link rel="stylesheet" href="./styles.css?v=20260925-admin-top" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -199,20 +199,32 @@
               </div>
               <input id="companySearchInput" type="search" placeholder="会社名で検索" />
             </div>
+            <div class="portfolio-toolbar">
+              <div class="portfolio-filters" id="tableFilters" role="group" aria-label="状態で絞り込み"></div>
+              <p class="table-legend"><i class="seg-new"></i>新規 <i class="seg-build"></i>構築 <i class="seg-pr"></i>PR　列名を押すと並び替え</p>
+            </div>
             <div class="table-wrap">
-              <table class="admin-table">
+              <table class="admin-table company-overview-table">
                 <thead>
                   <tr>
-                    <th><button class="table-sort active desc" data-sort="name" type="button">会社名</button></th>
-                    <th><button class="table-sort active desc" data-sort="enrollment" type="button">在籍</button></th>
-                    <th><button class="table-sort" data-sort="newCount" type="button">新規</button></th>
-                    <th><button class="table-sort" data-sort="buildCount" type="button">構築</button></th>
-                    <th><button class="table-sort" data-sort="prCount" type="button">PR</button></th>
+                    <th><button class="table-sort" data-sort="name" type="button">会社名</button></th>
+                    <th>
+                      <button class="table-sort active desc" data-sort="enrollment" type="button">在籍</button>
+                      <span class="sub-sorts">
+                        <button class="table-sort" data-sort="newCount" type="button">新規</button>
+                        <button class="table-sort" data-sort="buildCount" type="button">構築</button>
+                        <button class="table-sort" data-sort="prCount" type="button">PR</button>
+                      </span>
+                    </th>
                     <th><button class="table-sort" data-sort="progress" type="button">平均進捗</button></th>
                     <th><button class="table-sort" data-sort="risk" type="button">要確認</button></th>
-                    <th><button class="table-sort" data-sort="sales" type="button">合計売上</button></th>
-                    <th><button class="table-sort" data-sort="salesTto" type="button">TTO売上</button></th>
-                    <th><button class="table-sort" data-sort="salesTts" type="button">TTS売上</button></th>
+                    <th>
+                      <button class="table-sort" data-sort="sales" type="button">合計売上</button>
+                      <span class="sub-sorts">
+                        <button class="table-sort" data-sort="salesTto" type="button">TTO</button>
+                        <button class="table-sort" data-sort="salesTts" type="button">TTS</button>
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody id="companyTable"></tbody>
@@ -798,6 +810,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260925-ui-all"></script>
+    <script src="./app.js?v=20260925-admin-top"></script>
   </body>
 </html>
