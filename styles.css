@@ -4739,3 +4739,281 @@ td {
     flex: 0 0 auto;
   }
 }
+
+/* ============================================================
+   受講生一覧：絞り込みチップ・表示切替・詰まり別グループ
+   ============================================================ */
+.member-toolbar {
+  align-items: flex-start;
+}
+
+.member-chip-groups {
+  display: grid;
+  gap: 8px;
+}
+
+.chip-group-label {
+  align-self: center;
+  min-width: 34px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.portfolio-chip.status-f b { background: #fde4e1; color: var(--danger); }
+.portfolio-chip.status-b b { background: #fff0d6; color: #9a5b00; }
+.portfolio-chip.status-a b,
+.portfolio-chip.status-s b { background: var(--soft-green); color: var(--accent-2); }
+
+.view-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.view-toggle button {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.view-toggle button.active {
+  background: #ffffff;
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(2, 33, 80, 0.15);
+}
+
+.member-group-row td {
+  position: sticky;
+  top: 37px; /* 見出し行の下に固定 */
+  z-index: 1;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: #eaf1ff !important;
+  cursor: pointer;
+}
+
+.member-group-row td > * {
+  vertical-align: middle;
+}
+
+.member-group-row strong {
+  margin-right: 8px;
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.group-caret {
+  display: inline-block;
+  width: 16px;
+  color: var(--accent-2);
+  transition: transform 0.15s ease;
+}
+
+.member-group-row.collapsed .group-caret {
+  transform: rotate(-90deg);
+}
+
+.group-count,
+.group-f {
+  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.group-f {
+  background: #fde4e1;
+  color: var(--danger);
+}
+
+.group-action {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.member-group-row:hover td {
+  background: #dfe9ff !important;
+}
+
+.member-own-action {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ============================================================
+   進捗更新シート：列のまとまりごとのタブ
+   ============================================================ */
+.sheet-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sheet-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.sheet-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px 8px 0 0;
+  border-bottom-width: 3px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sheet-tab.active {
+  border-bottom-color: var(--accent-2);
+  color: var(--accent);
+  background: #f3f7ff;
+}
+
+.sheet-tab b {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #ffe8c7;
+  color: #8a5a11;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* タブ表示中は列数が少ないので、表を無理に横長にしない */
+#updates .update-sheet:not(.sheet-all-columns) {
+  min-width: 0;
+  width: 100%;
+}
+
+#updates .update-sheet:not(.sheet-all-columns) .check-cell {
+  text-align: center;
+}
+
+/* ============================================================
+   個人詳細：タブ
+   ============================================================ */
+.detail-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  gap: 4px;
+  margin: 0 0 14px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.detail-tabs button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.detail-tabs button.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.detail-tabs button b {
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0.85;
+}
+
+.detail-tab-hidden {
+  display: none !important;
+}
+
+@media (max-width: 680px) {
+  .member-toolbar .portfolio-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .member-chip-groups .portfolio-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .group-action {
+    display: block;
+    margin: 4px 0 0 16px;
+  }
+}
+
+/* スマホ：詰まり別表示は5列なので、横スクロールなしで収める */
+@media (max-width: 680px) {
+  .member-table.member-table-grouped {
+    min-width: 0;
+  }
+
+  .member-table.member-table-grouped th,
+  .member-table.member-table-grouped td {
+    padding: 8px 6px;
+  }
+
+  .member-table.member-table-grouped .mini-progress {
+    min-width: 72px;
+  }
+
+  .member-table.member-table-grouped .mini-progress-row span:last-child {
+    display: none; /* 「進行中」等のラベルはバーで分かるため、狭い画面だけ省略 */
+  }
+
+  .member-table.member-table-grouped .member-link {
+    white-space: normal;
+  }
+
+  .member-table.member-table-grouped .danger-button {
+    padding: 4px 7px;
+  }
+}
+
+@media (max-width: 680px) {
+  /* 詰まり別表示は横スクロールしないのでヒントを出さない */
+  .member-table-wrap:has(.member-table-grouped)::before {
+    display: none;
+  }
+
+  .member-table.member-table-grouped .danger-button {
+    width: auto;
+    min-width: 0;
+  }
+}
