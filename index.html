@@ -50,7 +50,7 @@
         ]
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=20260924-seo" />
+    <link rel="stylesheet" href="./styles.css?v=20260925-work-screens" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -573,16 +573,16 @@
             </form>
           </section>
 
-          <section class="panel">
+          <section class="panel member-list-panel">
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Member management</p>
-                <h2>受講生一覧</h2>
+                <h2>受講生一覧 <span class="pill member-count" id="memberCountPill"></span></h2>
               </div>
               <input id="searchInput" type="search" placeholder="名前で検索" />
             </div>
-            <div class="table-wrap">
-              <table>
+            <div class="table-wrap member-table-wrap">
+              <table class="member-table">
                 <thead>
                   <tr>
                     <th>受講生</th>
@@ -618,9 +618,9 @@
 
         <div class="detail-action-board" id="detailActionBoard"></div>
 
-        <div class="detail-account-panel" id="detailAccountPanel"></div>
-
         <div class="detail-kpis" id="detailKpis"></div>
+
+        <div class="detail-account-panel" id="detailAccountPanel"></div>
 
         <div class="detail-section">
           <div class="panel-header compact">
@@ -768,6 +768,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260924-seo"></script>
+    <script src="./app.js?v=20260925-work-screens"></script>
   </body>
 </html>
