@@ -50,7 +50,7 @@
         ]
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=20260925-portfolio" />
+    <link rel="stylesheet" href="./styles.css?v=20260925-ui-all" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -464,6 +464,7 @@
                   <button class="primary-button small" id="saveUpdateSheet" type="button">保存して反映</button>
                 </div>
               </div>
+              <div class="sheet-tabs" id="sheetTabs" role="tablist" aria-label="表示する列のまとまり"></div>
               <div class="update-sheet-wrap">
                 <table class="update-sheet">
                   <thead id="updateSheetHead"></thead>
@@ -594,19 +595,27 @@
               </div>
               <input id="searchInput" type="search" placeholder="名前で検索" />
             </div>
+            <div class="portfolio-toolbar member-toolbar">
+              <div class="member-chip-groups">
+                <div class="portfolio-filters" id="memberStatusChips" role="group" aria-label="評価で絞り込み"></div>
+                <div class="portfolio-filters" id="memberStageChips" role="group" aria-label="段階で絞り込み"></div>
+              </div>
+              <div class="portfolio-controls">
+                <div class="view-toggle" role="group" aria-label="表示の切り替え">
+                  <button type="button" data-member-view="group">詰まり別</button>
+                  <button type="button" data-member-view="list">一覧</button>
+                </div>
+                <select id="memberSort" aria-label="並び順">
+                  <option value="progressAsc">進捗の低い順</option>
+                  <option value="progressDesc">進捗の高い順</option>
+                  <option value="status">評価順（F→S）</option>
+                  <option value="name">名前順</option>
+                </select>
+              </div>
+            </div>
             <div class="table-wrap member-table-wrap">
               <table class="member-table">
-                <thead>
-                  <tr>
-                    <th>受講生</th>
-                    <th>段階</th>
-                    <th>評価</th>
-                    <th>進捗率</th>
-                    <th>直近の詰まり</th>
-                    <th>推奨アクション</th>
-                    <th class="member-actions-col">管理</th>
-                  </tr>
-                </thead>
+                <thead id="memberTableHead"></thead>
                 <tbody id="memberTable"></tbody>
               </table>
             </div>
@@ -629,13 +638,21 @@
           </div>
         </div>
 
-        <div class="detail-action-board" id="detailActionBoard"></div>
+        <nav class="detail-tabs" id="detailTabs" role="tablist" aria-label="受講生詳細の表示切替">
+          <button type="button" role="tab" data-detail-tab-button="overview">概要</button>
+          <button type="button" role="tab" data-detail-tab-button="milestones">達成項目 <b id="detailTabMilestones"></b></button>
+          <button type="button" role="tab" data-detail-tab-button="trend">推移</button>
+          <button type="button" role="tab" data-detail-tab-button="mtg">MTG <b id="detailTabMtg"></b></button>
+          <button type="button" role="tab" data-detail-tab-button="all">すべて</button>
+        </nav>
 
-        <div class="detail-kpis" id="detailKpis"></div>
+        <div data-detail-tab="overview" class="detail-action-board" id="detailActionBoard"></div>
 
-        <div class="detail-account-panel" id="detailAccountPanel"></div>
+        <div data-detail-tab="overview" class="detail-kpis" id="detailKpis"></div>
 
-        <div class="detail-section">
+        <div data-detail-tab="overview" class="detail-account-panel" id="detailAccountPanel"></div>
+
+        <div data-detail-tab="milestones" class="detail-section">
           <div class="panel-header compact">
             <div>
               <p class="eyebrow">Completion map</p>
@@ -646,7 +663,7 @@
           <div class="completion-grid" id="completionGrid"></div>
         </div>
 
-        <div class="detail-section detail-inputs">
+        <div data-detail-tab="overview" class="detail-section detail-inputs">
           <div class="panel-header compact">
             <div>
               <p class="eyebrow">Quick edit</p>
@@ -745,7 +762,7 @@
           <div class="operation-feed detail-feed" id="detailUpdateFeed"></div>
         </div>
 
-        <div class="detail-section">
+        <div data-detail-tab="trend" class="detail-section">
           <div class="panel-header compact">
             <div>
               <p class="eyebrow">Follower trend</p>
@@ -756,7 +773,7 @@
           <div class="mini-chart" id="followerChart"></div>
         </div>
 
-        <div class="detail-section">
+        <div data-detail-tab="trend" class="detail-section">
           <div class="panel-header compact">
             <div>
               <p class="eyebrow">Sales trend</p>
@@ -768,7 +785,7 @@
           <div class="breakdown-strip" id="salesBreakdownStrip"></div>
         </div>
 
-        <div class="detail-section">
+        <div data-detail-tab="mtg" class="detail-section">
           <div class="panel-header compact">
             <div>
               <p class="eyebrow">Coaching log</p>
@@ -781,6 +798,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260925-portfolio"></script>
+    <script src="./app.js?v=20260925-ui-all"></script>
   </body>
 </html>

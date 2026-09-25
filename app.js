@@ -797,6 +797,10 @@ const state = {
   portfolioFilter: "all",
   portfolioSort: "enrollment",
   portfolioSearch: "",
+  memberView: "group",
+  memberSort: "progressAsc",
+  collapsedMemberGroups: new Set(),
+  sheetTab: "numbers",
   activeMemberName: "",
   mtgMemberName: "",
   mtgEditing: null,
@@ -1930,14 +1934,76 @@ function renderPipeline() {
   }).join("");
 }
 
+// 「直近の詰まり」の並び順（研修の進む順）。詰まり別表示のグループ順に使う
+const MISSING_POINT_ORDER = [
+  "毎日投稿未完了", "Q&A未完了", "MTG未完了", "オリエン未完了", "初回MTG未完了", "アカウント作成未完了",
+  "初回投稿未完了", "フォロワー100未完了", "フォロワー300未完了", "フォロワー500未完了", "フォロワー700未完了",
+  "フォロワー1000未完了", "PR初回MTG未完了", "商品申請未完了", "PRカルーセル未完了", "PR動画未完了",
+  "PR TTS未完了", "スパークアズ未完了", "サクラ連携未完了", "月1件獲得未完了", "月10件獲得未完了",
+  "月30件獲得未完了", "月100件獲得未完了", "次のPR施策へ進行可能"
+];
+const STATUS_ORDER = { F: 0, B: 1, A: 2, S: 3 };
+
+function sortMembersForView(list) {
+  const sorters = {
+    progressAsc: (a, b) => a.progress - b.progress,
+    progressDesc: (a, b) => b.progress - a.progress,
+    status: (a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.progress - b.progress,
+    name: (a, b) => a.name.localeCompare(b.name, "ja")
+  };
+  return [...list].sort(sorters[state.memberSort] || sorters.progressAsc);
+}
+
+function memberProgressCell(member) {
+  return `
+    <div class="mini-progress">
+      <div class="mini-progress-row"><span>${member.progress}%</span><span>${progressLabel(member.progress)}</span></div>
+      <div class="progress"><span style="width:${member.progress}%"></span></div>
+    </div>
+  `;
+}
+
+function memberDeleteCell(member) {
+  return roleCanManageMembers() ? `<button class="danger-button delete-member-button" data-member="${member.name}" type="button">削除</button>` : "";
+}
+
+// 評価・段階の絞り込みチップ（上部のプルダウンと同じ状態を使う）
+function renderMemberChips() {
+  const base = selectedCompany().members.filter((member) => member.name.includes(state.search.trim()));
+  const byStage = base.filter((member) => state.stage === "all" || member.stage === state.stage);
+  const byStatus = base.filter((member) => state.status === "all" || member.status === state.status);
+  const statusChips = [["all", "すべて"], ["F", "F"], ["B", "B"], ["A", "A"], ["S", "S"]];
+  $("#memberStatusChips").innerHTML = `<span class="chip-group-label">評価</span>` + statusChips.map(([key, label]) => {
+    const count = key === "all" ? byStage.length : byStage.filter((member) => member.status === key).length;
+    return `<button class="portfolio-chip status-${key.toLowerCase()} ${state.status === key ? "active" : ""}" data-member-status="${key}" type="button" aria-pressed="${state.status === key}">${label}<b>${count}</b></button>`;
+  }).join("");
+  const stageChips = [["all", "全フェーズ"], ["PR", "PR"], ["構築", "構築"]];
+  $("#memberStageChips").innerHTML = `<span class="chip-group-label">段階</span>` + stageChips.map(([key, label]) => {
+    const count = key === "all" ? byStatus.length : byStatus.filter((member) => member.stage === key).length;
+    return `<button class="portfolio-chip ${state.stage === key ? "active" : ""}" data-member-stage="${key}" type="button" aria-pressed="${state.stage === key}">${label}<b>${count}</b></button>`;
+  }).join("");
+  $$("[data-member-view]").forEach((button) => {
+    const active = button.dataset.memberView === state.memberView;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if ($("#memberSort").value !== state.memberSort) $("#memberSort").value = state.memberSort;
+}
+
 function renderMembers() {
   const rows = filteredMembers();
   const countPill = $("#memberCountPill");
   if (countPill) countPill.textContent = `${rows.length}名`;
+  renderMemberChips();
+  const grouped = state.memberView === "group";
+  $(".member-table")?.classList.toggle("member-table-grouped", grouped);
+  $("#memberTableHead").innerHTML = grouped
+    ? `<tr><th>受講生</th><th>段階</th><th>評価</th><th>進捗率</th><th class="member-actions-col">管理</th></tr>`
+    : `<tr><th>受講生</th><th>段階</th><th>評価</th><th>進捗率</th><th>直近の詰まり</th><th>推奨アクション</th><th class="member-actions-col">管理</th></tr>`;
   if (!rows.length) {
     $("#memberTable").innerHTML = `
       <tr>
-        <td colspan="7">
+        <td colspan="${grouped ? 5 : 7}">
           <div class="table-empty">
             <strong>表示できる受講生がいません</strong>
             <p>条件に一致する受講生がいないか、まだ受講生が登録されていません。</p>
@@ -1948,22 +2014,71 @@ function renderMembers() {
     bindMemberDeleteButtons();
     return;
   }
-  $("#memberTable").innerHTML = rows.map((member) => `
-    <tr>
-      <td><button class="member-link" data-member="${member.name}" type="button">${member.name}</button></td>
-      <td>${member.stage}</td>
-      <td><span class="badge ${member.status.toLowerCase()}">${member.status}</span></td>
-      <td>
-        <div class="mini-progress">
-          <div class="mini-progress-row"><span>${member.progress}%</span><span>${progressLabel(member.progress)}</span></div>
-          <div class="progress"><span style="width:${member.progress}%"></span></div>
-        </div>
-      </td>
-      <td>${missingPoint(member)}</td>
-      <td>${actionFor(member)}</td>
-      <td>${roleCanManageMembers() ? `<button class="danger-button delete-member-button" data-member="${member.name}" type="button">削除</button>` : ""}</td>
-    </tr>
-  `).join("");
+
+  if (!grouped) {
+    $("#memberTable").innerHTML = sortMembersForView(rows).map((member) => `
+      <tr>
+        <td><button class="member-link" data-member="${member.name}" type="button">${member.name}</button></td>
+        <td>${member.stage}</td>
+        <td><span class="badge ${member.status.toLowerCase()}">${member.status}</span></td>
+        <td>${memberProgressCell(member)}</td>
+        <td>${missingPoint(member)}</td>
+        <td>${actionFor(member)}</td>
+        <td>${memberDeleteCell(member)}</td>
+      </tr>
+    `).join("");
+  } else {
+    // 直近の詰まりごとにまとめ、見出しに人数と推奨アクションを出す
+    const groups = new Map();
+    rows.forEach((member) => {
+      const key = missingPoint(member);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(member);
+    });
+    const orderOf = (key) => {
+      const index = MISSING_POINT_ORDER.indexOf(key);
+      return index < 0 ? MISSING_POINT_ORDER.length : index;
+    };
+    $("#memberTable").innerHTML = [...groups.entries()]
+      .sort(([a], [b]) => orderOf(a) - orderOf(b))
+      .map(([key, members]) => {
+        const actionCounts = new Map();
+        members.forEach((member) => {
+          const action = actionFor(member);
+          actionCounts.set(action, (actionCounts.get(action) || 0) + 1);
+        });
+        const commonAction = [...actionCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+        const collapsed = state.collapsedMemberGroups.has(key);
+        const fCount = members.filter((member) => member.status === "F").length;
+        const header = `
+          <tr class="member-group-row ${collapsed ? "collapsed" : ""}" data-member-group="${escapeHtml(key)}" tabindex="0" role="button" aria-expanded="${!collapsed}">
+            <td colspan="5">
+              <span class="group-caret" aria-hidden="true">▾</span>
+              <strong>${escapeHtml(key)}</strong>
+              <b class="group-count">${members.length}名</b>
+              ${fCount ? `<b class="group-f">F ${fCount}名</b>` : ""}
+              <span class="group-action">推奨アクション：${escapeHtml(commonAction)}</span>
+            </td>
+          </tr>
+        `;
+        if (collapsed) return header;
+        return header + sortMembersForView(members).map((member) => {
+          const action = actionFor(member);
+          return `
+            <tr class="member-group-item">
+              <td>
+                <button class="member-link" data-member="${member.name}" type="button">${member.name}</button>
+                ${action !== commonAction ? `<small class="member-own-action">推奨アクション：${escapeHtml(action)}</small>` : ""}
+              </td>
+              <td>${member.stage}</td>
+              <td><span class="badge ${member.status.toLowerCase()}">${member.status}</span></td>
+              <td>${memberProgressCell(member)}</td>
+              <td>${memberDeleteCell(member)}</td>
+            </tr>
+          `;
+        }).join("");
+      }).join("");
+  }
   bindMemberLinks();
   bindMemberDeleteButtons();
 }
@@ -2039,18 +2154,75 @@ function sheetColumns() {
   ];
 }
 
+// 進捗更新シートの列を、目的ごとのタブに分ける（「すべての列」で従来の表示）
+function sheetTabs() {
+  // 列は「種類:キー」で区別する（前提条件のMTGチェックと、MTG登録ボタンの列が同じキー mtg のため）
+  const base = ["name:name", "formula:status", "formula:progress"];
+  return [
+    { key: "numbers", label: "数字・評価", cols: ["name:name", "select:stage", "formula:status", "formula:progress", "number:followers", "number:salesTto", "number:salesTts", "number:sales"] },
+    ...detailMilestoneGroups.map((group, index) => ({
+      key: `milestone-${index}`,
+      label: group.title,
+      cols: [...base, ...group.items.map(([key]) => `check:${key}`)]
+    })),
+    { key: "share", label: "アカウント・メモ・MTG", cols: ["name:name", "accounts:accountLinks", "memo:clientMemo", "mtg:mtg"] },
+    { key: "all", label: "すべての列", cols: null }
+  ];
+}
+
+function sheetColumnId(column) {
+  return `${column.type}:${column.key}`;
+}
+
+function columnsForSheetTab(tab) {
+  const all = sheetColumns();
+  return tab.cols === null ? all : all.filter((column) => tab.cols.includes(sheetColumnId(column)));
+}
+
+// 列の上段見出し。達成項目はグループ名（前提条件・基礎構築…）で表示する
+function sheetColumnBand(column) {
+  if (column.key === "name") return "対象";
+  if (column.key === "stage") return "入力";
+  if (column.type === "formula") return "自動計算";
+  if (["followers", "salesTto", "salesTts", "sales"].includes(column.key)) return "実績（合計 = TTO + TTS）";
+  if (column.type === "check") return column.group || "達成項目";
+  if (["accountLinks", "clientMemo"].includes(column.key)) return "共有";
+  return "MTG";
+}
+
+function renderSheetTabs(tabs) {
+  const target = $("#sheetTabs");
+  if (!target) return;
+  target.innerHTML = tabs.map((tab) => {
+    // タブごとの未保存件数（別タブで入力した内容を忘れないように）
+    const editable = new Set(columnsForSheetTab(tab).filter((column) => !["name", "formula", "mtg"].includes(column.type)).map((column) => column.key));
+    const pending = Object.values(state.updateDrafts).reduce((sum, fields) => (
+      sum + Object.keys(fields).filter((field) => editable.has(field)).length
+    ), 0);
+    const active = state.sheetTab === tab.key;
+    return `<button class="sheet-tab ${active ? "active" : ""}" data-sheet-tab="${tab.key}" type="button" role="tab" aria-selected="${active}">${tab.label}${pending ? `<b>${pending}</b>` : ""}</button>`;
+  }).join("");
+}
+
 function renderUpdateSheet() {
-  const columns = sheetColumns();
+  const tabs = sheetTabs();
+  if (!tabs.some((tab) => tab.key === state.sheetTab)) state.sheetTab = "numbers";
+  const activeTab = tabs.find((tab) => tab.key === state.sheetTab);
+  const columns = columnsForSheetTab(activeTab);
   const members = filteredMembers();
+  renderSheetTabs(tabs);
+  $(".update-sheet")?.classList.toggle("sheet-all-columns", activeTab.cols === null);
+
+  const bands = [];
+  columns.forEach((column, index) => {
+    const label = sheetColumnBand(column);
+    const last = bands[bands.length - 1];
+    if (last && last.label === label) last.span += 1;
+    else bands.push({ label, span: 1, sticky: index === 0 });
+  });
   $("#updateSheetHead").innerHTML = `
     <tr class="sheet-group-row">
-      <th class="sticky-col">対象</th>
-      <th>入力</th>
-      <th colspan="2">自動計算</th>
-      <th colspan="4">実績（合計 = TTO + TTS）</th>
-      <th colspan="${allDetailMilestones().length}">達成項目</th>
-      <th colspan="2">共有</th>
-      <th>MTG</th>
+      ${bands.map((band) => `<th class="${band.sticky ? "sticky-col" : ""}" ${band.span > 1 ? `colspan="${band.span}"` : ""}>${band.label}</th>`).join("")}
     </tr>
     <tr class="sheet-column-row">
       ${columns.map((column, index) => `<th class="${index === 0 ? "sticky-col" : ""}">${column.label}</th>`).join("")}
@@ -2471,6 +2643,7 @@ function updateDraftStatus() {
   pill.className = `pill ${count ? "warn" : ""}`;
   saveButton.disabled = count === 0 || !roleCanEdit();
   discardButton.disabled = count === 0 || !roleCanEdit();
+  renderSheetTabs(sheetTabs());
   renderDraftReview();
 }
 
@@ -3109,7 +3282,22 @@ function bindCompanyJumps() {
   });
 }
 
+// 個人詳細のタブ切り替え。「すべて」は従来どおり縦に全部並べる
+function setDetailTab(tab) {
+  state.detailTab = tab;
+  $$("[data-detail-tab-button]").forEach((button) => {
+    const active = button.dataset.detailTabButton === tab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  $$("[data-detail-tab]").forEach((section) => {
+    section.classList.toggle("detail-tab-hidden", tab !== "all" && section.dataset.detailTab !== tab);
+  });
+}
+
 function openMemberDetail(member) {
+  // 別の受講生を開いた時は「概要」から。同じ受講生の再描画（自動更新など）ではタブを維持する
+  const switchingMember = state.activeMemberName !== member.name || !$("#detailOverlay").classList.contains("open");
   state.activeMemberName = member.name;
   const detail = memberDetail(member);
   $("#detailName").textContent = member.name;
@@ -3147,9 +3335,13 @@ function openMemberDetail(member) {
   renderSalesBreakdownStrip("#salesBreakdownStrip", detail);
   renderMeetings(detail.meetings);
   renderCompletionMap(member);
+  // タブ見出しに件数を添える（達成数・MTG件数）
+  if ($("#detailTabMilestones")) $("#detailTabMilestones").textContent = $("#completionPill")?.textContent || "";
+  if ($("#detailTabMtg")) $("#detailTabMtg").textContent = `${(detail.meetings || []).length}件`;
   fillDetailForms(member, detail);
   renderDetailUpdateFeed(member.name);
   applyRolePermissions();
+  setDetailTab(switchingMember ? "overview" : (state.detailTab || "overview"));
   $("#detailOverlay").classList.add("open");
   $("#detailOverlay").setAttribute("aria-hidden", "false");
 }
@@ -3656,6 +3848,49 @@ function bindEvents() {
     renderMembers();
   });
 
+  // 受講生一覧：絞り込みチップ・表示切替・並び替え・グループの開閉
+  $("#members").addEventListener("click", (event) => {
+    const statusChip = event.target.closest("[data-member-status]");
+    if (statusChip) {
+      state.status = statusChip.dataset.memberStatus;
+      $("#statusFilter").value = state.status;
+      renderAll();
+      return;
+    }
+    const stageChip = event.target.closest("[data-member-stage]");
+    if (stageChip) {
+      state.stage = stageChip.dataset.memberStage;
+      $("#stageFilter").value = state.stage;
+      renderAll();
+      return;
+    }
+    const viewButton = event.target.closest("[data-member-view]");
+    if (viewButton) {
+      state.memberView = viewButton.dataset.memberView;
+      renderMembers();
+      return;
+    }
+    const groupRow = event.target.closest("[data-member-group]");
+    if (groupRow) {
+      const key = groupRow.dataset.memberGroup;
+      if (state.collapsedMemberGroups.has(key)) state.collapsedMemberGroups.delete(key);
+      else state.collapsedMemberGroups.add(key);
+      renderMembers();
+    }
+  });
+
+  $("#members").addEventListener("keydown", (event) => {
+    const groupRow = event.target.closest?.("[data-member-group]");
+    if (!groupRow || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    groupRow.click();
+  });
+
+  $("#memberSort").addEventListener("change", (event) => {
+    state.memberSort = event.target.value;
+    renderMembers();
+  });
+
   $("#companySearchInput").addEventListener("input", (event) => {
     state.companySearch = event.target.value;
     renderCompanyTable();
@@ -3748,6 +3983,20 @@ function bindEvents() {
         setUpdateDraft(memberName, "sales", String(total));
       }
     }
+  });
+
+  $("#detailTabs").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-detail-tab-button]");
+    if (!button) return;
+    setDetailTab(button.dataset.detailTabButton);
+    $(".detail-drawer")?.scrollTo?.({ top: 0 });
+  });
+
+  $("#sheetTabs").addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-sheet-tab]");
+    if (!tab) return;
+    state.sheetTab = tab.dataset.sheetTab;
+    renderUpdateSheet();
   });
 
   $("#saveUpdateSheet").addEventListener("click", applyUpdateDrafts);
