@@ -50,7 +50,7 @@
         ]
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=20260925-work-screens" />
+    <link rel="stylesheet" href="./styles.css?v=20260925-portfolio" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -228,6 +228,19 @@
                   <h2>会社別マイページ一覧</h2>
                 </div>
                 <span class="pill">管理者専用</span>
+              </div>
+              <div class="portfolio-toolbar">
+                <div class="portfolio-filters" id="portfolioFilters" role="group" aria-label="状態で絞り込み"></div>
+                <div class="portfolio-controls">
+                  <input id="portfolioSearch" type="search" placeholder="会社名で検索" aria-label="会社名で検索" />
+                  <select id="portfolioSort" aria-label="並び順">
+                    <option value="enrollment">在籍の多い順</option>
+                    <option value="risk">要確認率の高い順</option>
+                    <option value="sales">売上の高い順</option>
+                    <option value="progress">平均進捗の低い順</option>
+                    <option value="name">会社名順</option>
+                  </select>
+                </div>
               </div>
               <div class="company-grid" id="companyGrid"></div>
             </section>
@@ -768,6 +781,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260925-work-screens"></script>
+    <script src="./app.js?v=20260925-portfolio"></script>
   </body>
 </html>
