@@ -794,6 +794,9 @@ const state = {
   search: "",
   companySearch: "",
   companySort: { key: "enrollment", direction: "desc" },
+  portfolioFilter: "all",
+  portfolioSort: "enrollment",
+  portfolioSearch: "",
   activeMemberName: "",
   mtgMemberName: "",
   mtgEditing: null,
@@ -2520,47 +2523,80 @@ function clientPasswordFor(companyId) {
 }
 
 function renderCompanyGrid() {
-  const list = [...companies()].sort((a, b) => currentEnrollment(b) - currentEnrollment(a));
-  const maxSales = Math.max(...list.map((company) => Number(company.sales || 0)), 1);
+  const all = companies();
+  const maxSales = Math.max(...all.map((company) => Number(company.sales || 0)), 1);
   const canManage = roleCanManageCompanies();
-  $("#companyGrid").innerHTML = list.map((company) => {
+  const summary = all.map((company) => {
     const [tone, label] = statusTone(company);
-    const enrollment = currentEnrollment(company);
-    const avg = averageProgress(company.members);
     const risk = riskCount(company);
-    const riskRate = Math.round((risk / Math.max(1, company.members.length)) * 100);
-    const sales = Number(company.sales || 0);
+    return {
+      company,
+      tone,
+      label,
+      risk,
+      riskRate: Math.round((risk / Math.max(1, company.members.length)) * 100),
+      enrollment: currentEnrollment(company),
+      avg: averageProgress(company.members),
+      sales: Number(company.sales || 0)
+    };
+  });
+
+  // 状態で絞り込み（件数つき）
+  const filters = [["all", "すべて"], ["danger", "要改善"], ["warn", "要観察"], ["good", "順調"]];
+  if (!filters.some(([key]) => key === state.portfolioFilter)) state.portfolioFilter = "all";
+  $("#portfolioFilters").innerHTML = filters.map(([key, label]) => {
+    const count = key === "all" ? summary.length : summary.filter((item) => item.tone === key).length;
+    return `<button class="portfolio-chip ${key} ${state.portfolioFilter === key ? "active" : ""}" data-portfolio-filter="${key}" type="button" aria-pressed="${state.portfolioFilter === key}">${label}<b>${count}</b></button>`;
+  }).join("");
+  if ($("#portfolioSort").value !== state.portfolioSort) $("#portfolioSort").value = state.portfolioSort;
+
+  const keyword = state.portfolioSearch.trim().toLowerCase();
+  const sorters = {
+    enrollment: (a, b) => b.enrollment - a.enrollment,
+    risk: (a, b) => b.riskRate - a.riskRate || b.risk - a.risk,
+    sales: (a, b) => b.sales - a.sales,
+    progress: (a, b) => a.avg - b.avg,
+    name: (a, b) => a.company.name.localeCompare(b.company.name, "ja")
+  };
+  const list = summary
+    .filter((item) => state.portfolioFilter === "all" || item.tone === state.portfolioFilter)
+    .filter((item) => !keyword || item.company.name.toLowerCase().includes(keyword))
+    .sort(sorters[state.portfolioSort] || sorters.enrollment);
+
+  if (!list.length) {
+    $("#companyGrid").innerHTML = `<p class="portfolio-empty">条件に合う会社はありません。絞り込みや検索を変えてください。</p>`;
+  } else $("#companyGrid").innerHTML = list.map(({ company, tone, label, risk, riskRate, enrollment, avg, sales }) => {
     const canDelete = canManage && !PROTECTED_COMPANY_IDS.has(company.id);
     const login = clientLoginInfoFor(company.id);
+    const breakdown = companyBreakdown(company);
     return `
-      <div class="company-card-wrap">
+      <div class="company-card-wrap tone-${tone}">
       ${canDelete ? `<button class="company-delete-button" data-delete-company="${company.id}" type="button" title="このマイページを削除" aria-label="${company.name} のマイページを削除">×</button>` : ""}
       <button class="company-card" data-company="${company.id}" type="button">
-        <div class="company-card-head">
-          <div>
-            <strong>${company.name}</strong>
-            <small>${label} / 売上 ${money(sales)}</small>
-          </div>
-          <span class="status-dot ${tone}"></span>
+        <div class="pc-head">
+          <span class="pc-status ${tone}">${label}</span>
+          <strong class="pc-name">${company.name}</strong>
         </div>
-        <div class="company-metrics">
-          <span><b>${enrollment}</b>在籍</span>
-          <span><b>${company.prCount}</b>PR</span>
-          <span><b>${company.buildCount}</b>構築</span>
-          <span class="metric-danger"><b>${risk}</b>要確認</span>
-        </div>
-        <div class="company-card-bars">
-          <div>
-            <span>平均進捗 ${avg}%</span>
-            <i><b style="width:${Math.min(100, Math.max(3, avg))}%"></b></i>
+        <div class="pc-main">
+          <div class="pc-sales">
+            <span>合計売上</span>
+            <b>${money(sales)}</b>
+            <small>${breakdownText(breakdown.tto, breakdown.tts)}</small>
+            <i><em style="width:${Math.min(100, Math.max(2, Math.round((sales / maxSales) * 100)))}%"></em></i>
           </div>
-          <div>
-            <span>合計売上 ${money(sales)}</span>
-            <i><b style="width:${Math.min(100, Math.max(3, Math.round((sales / maxSales) * 100)))}%"></b></i>
-            <small class="sales-split">${breakdownText(companyBreakdown(company).tto, companyBreakdown(company).tts)}</small>
+          <div class="pc-risk ${risk > 0 ? tone : "good"}">
+            <span>要確認</span>
+            <b>${risk}<small>名</small></b>
+            <small>要確認率 ${riskRate}%</small>
           </div>
         </div>
-        <p class="subtext">要確認率 ${riskRate}% / クリックで会社ページへ</p>
+        <div class="pc-stats">
+          <span><small>在籍</small><b>${enrollment}</b></span>
+          <span><small>PR</small><b>${company.prCount}</b></span>
+          <span><small>構築</small><b>${company.buildCount}</b></span>
+          <span class="pc-progress"><small>平均進捗 <b>${avg}%</b></small><i><em style="width:${Math.min(100, Math.max(2, avg))}%"></em></i></span>
+        </div>
+        <span class="pc-open">会社ページを開く →</span>
       </button>
       ${canManage ? `
         <div class="company-login">
@@ -2572,6 +2608,13 @@ function renderCompanyGrid() {
       </div>
     `;
   }).join("");
+
+  $$("[data-portfolio-filter]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      state.portfolioFilter = chip.dataset.portfolioFilter;
+      renderCompanyGrid();
+    });
+  });
 
   $$(".company-card").forEach((card) => {
     card.addEventListener("click", () => {
@@ -3616,6 +3659,16 @@ function bindEvents() {
   $("#companySearchInput").addEventListener("input", (event) => {
     state.companySearch = event.target.value;
     renderCompanyTable();
+  });
+
+  $("#portfolioSearch").addEventListener("input", (event) => {
+    state.portfolioSearch = event.target.value;
+    renderCompanyGrid();
+  });
+
+  $("#portfolioSort").addEventListener("change", (event) => {
+    state.portfolioSort = event.target.value;
+    renderCompanyGrid();
   });
 
   $("#newCompanyCode").addEventListener("input", (event) => {
