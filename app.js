@@ -801,6 +801,7 @@ const state = {
   memberSort: "progressAsc",
   collapsedMemberGroups: new Set(),
   sheetTab: "numbers",
+  tableFilter: "all",
   activeMemberName: "",
   mtgMemberName: "",
   mtgEditing: null,
@@ -1368,16 +1369,17 @@ function salesLeadersAllCompanies(limit = 5) {
 function renderSalesLeaderRows(items, emptyText = "売上が登録されている受講生はいません。") {
   if (!items.length) return `<p class="subtext">${emptyText}</p>`;
   const maxSales = Math.max(...items.map((item) => item.sales), 1);
+  // 名前・バー・金額を1行に並べ、名前から金額までの視線移動を短くする
   return items.map((item, index) => `
-    <button class="focus-member member-link" data-company="${item.company?.id || selectedCompany().id}" data-member="${item.member.name}" type="button">
+    <button class="focus-member member-link rank-row" data-company="${item.company?.id || selectedCompany().id}" data-member="${item.member.name}" type="button">
       <b class="focus-rank">${index + 1}</b>
-      <span>
+      <span class="rank-who">
         <strong>${item.member.name}</strong>
         <small>${item.company ? `${item.company.name}` : selectedCompany().name}</small>
         <small>${item.member.stage} / 評価 ${item.member.status} / 進捗 ${item.member.progress}%</small>
-        <i><b style="width:${Math.min(100, Math.max(8, Math.round((item.sales / maxSales) * 100)))}%"></b></i>
       </span>
-      <em>${money(item.sales)}<small class="sales-split">${breakdownText(item.tto, item.tts)}</small></em>
+      <span class="rank-bar"><i><b style="width:${Math.min(100, Math.max(4, Math.round((item.sales / maxSales) * 100)))}%"></b></i></span>
+      <em class="rank-amount">${money(item.sales)}<small class="sales-split">${breakdownText(item.tto, item.tts)}</small></em>
     </button>
   `).join("");
 }
@@ -1434,19 +1436,21 @@ function renderAdminCommandTop() {
   $("#adminSalesLeaders").innerHTML = renderSalesLeaderRows(leaders, "全社で売上登録はありません。");
   $("#adminCompanySnapshot").innerHTML = `
     <div class="company-rank-list">
-      ${topCompanies.map((company) => `
-        <button class="company-rank-row company-jump" data-company="${company.id}" type="button">
-          <span>
-            <strong>${company.name}</strong>
+      ${topCompanies.map((company, index) => {
+        const [tone, label] = statusTone(company);
+        const sales = Number(company.sales || 0);
+        return `
+        <button class="company-rank-row company-jump rank-row" data-company="${company.id}" type="button">
+          <b class="focus-rank">${index + 1}</b>
+          <span class="rank-who">
+            <strong><span class="pc-status ${tone}">${label}</span>${company.name}</strong>
             <small><b>在籍 ${currentEnrollment(company)}名</b><b>平均 ${averageProgress(company.members)}%</b><b>要確認 ${riskCount(company)}名</b></small>
           </span>
-          <em>
-            <strong>${money(company.sales || 0)}</strong>
-            <small class="sales-split">${breakdownText(companyBreakdown(company).tto, companyBreakdown(company).tts)}</small>
-            <i><b style="width:${Math.min(100, Math.max(5, Math.round((Number(company.sales || 0) / Math.max(1, topCompanySales)) * 100)))}%"></b></i>
-          </em>
+          <span class="rank-bar"><i><b style="width:${Math.min(100, Math.max(sales ? 4 : 0, Math.round((sales / Math.max(1, topCompanySales)) * 100)))}%"></b></i></span>
+          <em class="rank-amount">${money(sales)}<small class="sales-split">${breakdownText(companyBreakdown(company).tto, companyBreakdown(company).tts)}</small></em>
         </button>
-      `).join("")}
+      `;
+      }).join("")}
     </div>
   `;
   bindMemberLinks();
@@ -2840,9 +2844,19 @@ function renderCompanyTable() {
     if (key === "salesTts") return Number(companyBreakdown(company).tts || 0);
     return 0;
   };
-  const breakdownCell = (value) => value === null ? `<span class="subtext">未入力</span>` : money(value);
-  const rows = companies()
+  const all = companies();
+  const maxSales = Math.max(...all.map((company) => Number(company.sales || 0)), 1);
+
+  // 会社別マイページ一覧と同じ「状態」で絞り込み
+  const filters = [["all", "すべて"], ["danger", "要改善"], ["warn", "要観察"], ["good", "順調"]];
+  $("#tableFilters").innerHTML = filters.map(([key, label]) => {
+    const count = key === "all" ? all.length : all.filter((company) => statusTone(company)[0] === key).length;
+    return `<button class="portfolio-chip ${key} ${state.tableFilter === key ? "active" : ""}" data-table-filter="${key}" type="button" aria-pressed="${state.tableFilter === key}">${label}<b>${count}</b></button>`;
+  }).join("");
+
+  const rows = all
     .filter((company) => company.name.includes(state.companySearch.trim()))
+    .filter((company) => state.tableFilter === "all" || statusTone(company)[0] === state.tableFilter)
     .sort((a, b) => {
       const aValue = sortValue(a, state.companySort.key);
       const bValue = sortValue(b, state.companySort.key);
@@ -2857,25 +2871,66 @@ function renderCompanyTable() {
     button.classList.toggle("asc", active && state.companySort.direction === "asc");
     button.classList.toggle("desc", active && state.companySort.direction === "desc");
   });
+  const breakdownValue = (value) => value === null ? "未入力" : money(value);
   $("#companyTable").innerHTML = rows.map((company) => {
-    const [tone] = statusTone(company);
+    const [tone, label] = statusTone(company);
     const avg = averageProgress(company.members);
     const risk = riskCount(company);
+    const riskRate = Math.round((risk / Math.max(1, company.members.length)) * 100);
+    const enrollment = currentEnrollment(company);
+    const sales = Number(company.sales || 0);
+    const stages = [
+      ["new", "新規", Number(company.newCount || 0)],
+      ["build", "構築", Number(company.buildCount || 0)],
+      ["pr", "PR", Number(company.prCount || 0)]
+    ];
+    const stageTotal = Math.max(1, stages.reduce((sum, [, , count]) => sum + count, 0));
+    const breakdown = companyBreakdown(company);
+    const inactive = enrollment === 0 && sales === 0;
     return `
-      <tr class="company-row" data-company="${company.id}">
-        <td><span class="member-name">${company.name}</span></td>
-        <td>${currentEnrollment(company)}名</td>
-        <td>${company.newCount}名</td>
-        <td>${company.buildCount}名</td>
-        <td>${company.prCount}名</td>
-        <td><span class="table-progress"><b style="width:${Math.min(100, Math.max(3, avg))}%"></b></span><strong>${avg}%</strong></td>
-        <td><span class="badge ${tone === "danger" ? "" : "b"}">${risk}名</span></td>
-        <td><strong>${money(company.sales || 0)}</strong></td>
-        <td>${breakdownCell(companyBreakdown(company).tto)}</td>
-        <td>${breakdownCell(companyBreakdown(company).tts)}</td>
+      <tr class="company-row ${inactive ? "is-inactive" : ""}" data-company="${company.id}">
+        <td>
+          <div class="cell-company">
+            <span class="pc-status ${tone}">${label}</span>
+            <span class="member-name">${company.name}</span>
+          </div>
+        </td>
+        <td>
+          <div class="cell-enrollment">
+            <b>${enrollment}<small>名</small></b>
+            <span class="stage-bar" aria-hidden="true">${stages.map(([key, , count]) => count ? `<i class="seg-${key}" style="width:${(count / stageTotal) * 100}%"></i>` : "").join("")}</span>
+            <small>${stages.map(([, name, count]) => `${name}${count}`).join("・")}</small>
+          </div>
+        </td>
+        <td>
+          <div class="cell-progress">
+            <b>${avg}%</b>
+            <span class="table-progress"><b style="width:${Math.min(100, Math.max(3, avg))}%"></b></span>
+          </div>
+        </td>
+        <td>
+          <div class="cell-risk ${risk > 0 ? tone : "good"}">
+            <b>${risk}<small>名</small></b>
+            <small>要確認率 ${riskRate}%</small>
+          </div>
+        </td>
+        <td>
+          <div class="cell-sales">
+            <b>${money(sales)}</b>
+            <span class="table-progress sales"><b style="width:${Math.min(100, Math.max(sales ? 3 : 0, Math.round((sales / maxSales) * 100)))}%"></b></span>
+            <small>TTO ${breakdownValue(breakdown.tto)} / TTS ${breakdownValue(breakdown.tts)}</small>
+          </div>
+        </td>
       </tr>
     `;
-  }).join("");
+  }).join("") || `<tr><td colspan="5"><p class="portfolio-empty">条件に合う会社はありません。</p></td></tr>`;
+
+  $$("[data-table-filter]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      state.tableFilter = chip.dataset.tableFilter;
+      renderCompanyTable();
+    });
+  });
 
   $$(".company-row").forEach((row) => {
     row.addEventListener("click", () => {
