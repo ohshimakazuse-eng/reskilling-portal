@@ -5323,3 +5323,117 @@ td {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* ============================================================
+   TikTokの数字（個人詳細のアカウントカード／更新シートのタブ）
+   ============================================================ */
+.account-link-card .tt-stats,
+.account-link-card .tt-stats-empty {
+  grid-column: 1 / -1;
+}
+
+.tt-stats-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tt-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #dbe6ff;
+}
+
+.tt-stats-group {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.tt-stats-group > span {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.tt-stats-group dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.tt-stats-group dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tt-stats-group dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tt-stats-group dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tt-stats-group dd a {
+  color: var(--accent-2);
+}
+
+.tt-stats-updated {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* 更新シートのTikTokタブ */
+#updates .update-sheet.sheet-tiktok {
+  min-width: 1500px;
+}
+
+.update-sheet .tt-input {
+  min-width: 96px;
+}
+
+.update-sheet .tt-input.tt-url {
+  min-width: 220px;
+}
+
+.update-sheet .tt-input.tt-date {
+  min-width: 140px;
+}
+
+.update-sheet .tt-second {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.update-sheet .tt-updated {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: normal;
+}
+
+.update-sheet .tiktok-empty-row td {
+  background: #fbfcff;
+}
+
+@media (max-width: 680px) {
+  .tt-stats {
+    grid-template-columns: 1fr;
+  }
+}
