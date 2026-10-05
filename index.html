@@ -50,7 +50,7 @@
         ]
       }
     </script>
-    <link rel="stylesheet" href="./styles.css?v=20260925-admin-top" />
+    <link rel="stylesheet" href="./styles.css?v=20261005-ai-errors" />
   </head>
   <body>
     <div class="environment-warning hidden" id="environmentWarning">
@@ -320,9 +320,12 @@
                 <div>
                   <p class="eyebrow">AI設定</p>
                   <h2>進捗報告に使うAIモデル</h2>
-                  <p class="subtext" id="aiModelStatus">RenderのOPENAI_MODELで指定します。利用できるモデルIDはここで確認できます。</p>
+                  <p class="subtext" id="aiModelStatus">RenderのOPENAI_MODELで指定します。「AIの接続を確認」で、残高・1分あたりの上限・モデルが使えるかをまとめて確認できます。</p>
                 </div>
-                <button class="ghost-button small" id="checkAiModels" type="button">利用できるモデルを確認</button>
+                <div class="tool-card-actions">
+                  <button class="ghost-button small" id="checkAiConnection" type="button">AIの接続を確認</button>
+                  <button class="ghost-button small" id="checkAiModels" type="button">利用できるモデルを確認</button>
+                </div>
               </section>
             </div>
           </section>
@@ -810,6 +813,6 @@
     </div>
     <script src="./client-login.js?v=20260822-client-login"></script>
     <script src="./meeting-minutes.js?v=20260810-mtg-minutes"></script>
-    <script src="./app.js?v=20260925-admin-top"></script>
+    <script src="./app.js?v=20261005-ai-errors"></script>
   </body>
 </html>

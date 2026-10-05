@@ -5317,3 +5317,9 @@ td {
     min-width: 760px;
   }
 }
+
+.tool-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -469,7 +469,13 @@ async function generateProgressReportDraft() {
       body: JSON.stringify({ companyId: company.id })
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message || "下書きを生成できませんでした。");
+    if (!response.ok) {
+      const error = new Error(payload.message || "下書きを生成できませんでした。");
+      error.status = response.status;
+      error.code = payload.code || "";
+      error.detail = payload.detail || "";
+      throw error;
+    }
     setProgressReportFormValues({ sections: payload.report });
     // 生成結果は下書き。講師が確認・編集して「保存して反映」を押すまでクライアントには出さない
     state.progressReportDraft = {
@@ -484,9 +490,14 @@ async function generateProgressReportDraft() {
         : `${payload.monthLabel}の実績から下書きを作成しました（AI未設定のため数字ベースの下書きです）。確認・修正してから保存してください。`;
     }
   } catch (error) {
-    if ([401, 403].includes(error?.status)) handleSessionExpired();
-    if (status) status.textContent = "下書きを生成できませんでした。時間をおいてもう一度お試しください。";
-    window.alert(`下書きを生成できませんでした。\n${error.message}`);
+    if ([401, 403].includes(error?.status) && !String(error?.code || "").startsWith("ai_")) handleSessionExpired();
+    // 原因によって「待てば直る／直らない」が違うため、理由をそのまま出す（入力済みの内容は消さない）
+    if (status) status.textContent = `下書きを生成できませんでした: ${error.message}`;
+    const detail = error.detail ? `\n\n詳細（OpenAI）: ${error.detail}` : "";
+    const hint = String(error.code || "").startsWith("ai_")
+      ? "\n\n管理ツールの「AIの接続を確認」で、残高と1分あたりの上限を確認できます。"
+      : "";
+    window.alert(`下書きを生成できませんでした。\n${error.message}${detail}${hint}`);
   } finally {
     if (button) { button.disabled = false; button.textContent = originalText || "AIで下書きを生成"; }
   }
@@ -543,6 +554,45 @@ async function checkAiModels() {
     if (status) status.textContent = `モデル一覧を取得できませんでした: ${error.message}`;
   } finally {
     if (button) { button.disabled = false; button.textContent = originalText || "利用できるモデルを確認"; }
+  }
+}
+
+// 管理ツールの「AIの接続を確認」。残高・上限・モデルの問題をその場で切り分ける
+async function checkAiConnection() {
+  if (!roleCanManageCompanies()) return;
+  const button = $("#checkAiConnection");
+  const status = $("#aiModelStatus");
+  const originalText = button?.textContent;
+  try {
+    if (button) { button.disabled = true; button.textContent = "確認中..."; }
+    const company = selectedCompany();
+    const query = company ? `?companyId=${encodeURIComponent(company.id)}` : "";
+    const response = await fetch(`/api/admin/ai-check${query}`, { headers: authHeaders() });
+    const payload = await response.json();
+    if (!response.ok && !("model" in payload)) throw new Error(payload.message || "確認できませんでした。");
+    const lines = [];
+    if (payload.ok) {
+      const limits = payload.limits || {};
+      lines.push(`接続OK（モデル: ${payload.model}）。残高・認証に問題はありません。`);
+      if (limits.tokensPerMinute) {
+        lines.push(`1分あたりの上限: ${limits.tokensPerMinute.toLocaleString("ja-JP")}トークン`
+          + (limits.remainingTokens !== null ? `（現在の残り ${limits.remainingTokens.toLocaleString("ja-JP")}）` : "")
+          + (limits.requestsPerMinute ? ` / ${limits.requestsPerMinute.toLocaleString("ja-JP")}回` : ""));
+      }
+      if (payload.prompt && limits.tokensPerMinute) {
+        const share = Math.round((payload.prompt.estimatedTokens / limits.tokensPerMinute) * 100);
+        lines.push(`${payload.prompt.company}の依頼は約${payload.prompt.estimatedTokens.toLocaleString("ja-JP")}トークン（上限の約${share}%。AIの考える分と回答は別途かかります）。`);
+      }
+    } else {
+      lines.push(`接続NG（モデル: ${payload.model}）: ${payload.message}`);
+      if (payload.detail) lines.push(`詳細（OpenAI）: ${payload.detail}`);
+    }
+    if (status) status.textContent = lines.join(" ");
+  } catch (error) {
+    if ([401, 403].includes(error?.status)) handleSessionExpired();
+    if (status) status.textContent = `AIの接続を確認できませんでした: ${error.message}`;
+  } finally {
+    if (button) { button.disabled = false; button.textContent = originalText || "AIの接続を確認"; }
   }
 }
 
@@ -3991,6 +4041,7 @@ function bindEvents() {
   $("#generateProgressReport")?.addEventListener("click", () => void generateProgressReportDraft());
   $("#recordEnrollment")?.addEventListener("click", () => void recordEnrollmentForCurrentMonth());
   $("#checkAiModels")?.addEventListener("click", () => void checkAiModels());
+  $("#checkAiConnection")?.addEventListener("click", () => void checkAiConnection());
   $("#importEnrollmentHistory")?.addEventListener("click", () => void importEnrollmentHistory());
 
   $$(".table-sort").forEach((button) => {

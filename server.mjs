@@ -17,6 +17,7 @@ import {
 } from "./normalized-store.mjs";
 import {
   buildCompanyFacts,
+  checkAiConnection,
   configuredModel,
   generateProgressReport,
   isAiConfigured,
@@ -123,6 +124,20 @@ function sendJson(response, statusCode, payload) {
 
 function apiErrorPayload(error) {
   const rawMessage = String(error?.publicMessage || error?.message || "Server error");
+  // AI（OpenAI）由来のエラーは原因ごとの文面をそのまま返す。
+  // 下のDB判定（402・503）に巻き込まれると「Supabaseが停止」と誤表示されるため先に分ける。
+  if (String(error?.code || "").startsWith("ai_")) {
+    return {
+      statusCode: error.statusCode || 502,
+      payload: {
+        ok: false,
+        code: error.code,
+        message: rawMessage,
+        detail: error.detail || null,
+        retryAfterSeconds: error.retryAfterSeconds ?? null
+      }
+    };
+  }
   // Supabaseの利用上限（egress/容量超過などでプロジェクトが停止）。プラン側の対応が必要。
   const isQuotaRestricted = error?.code === "database_quota_restricted"
     || error?.statusCode === 402
@@ -589,6 +604,32 @@ async function handleApi(request, response, pathname) {
     try {
       const result = await listAvailableModels();
       sendJson(response, 200, { ok: true, ...result });
+    } catch (error) {
+      const { statusCode, payload } = apiErrorPayload(error);
+      sendJson(response, statusCode, payload);
+    }
+    return true;
+  }
+
+  // 管理ツールの「AIの接続を確認」。原因（残高不足・上限・認証・モデル）をその場で切り分ける
+  if (pathname === "/api/admin/ai-check" && request.method === "GET") {
+    const session = requireSession(request, response);
+    if (!session) return true;
+    if (!session.permissions.canViewAll || !session.permissions.canEdit) {
+      sendJson(response, 403, { ok: false, message: "admin permission required" });
+      return true;
+    }
+    try {
+      // 選択中の会社があれば、その会社の依頼文の大きさも見積もる（読むのはその1社だけ）
+      const companyId = String(new URL(request.url, "http://localhost").searchParams.get("companyId") || "");
+      let facts = null;
+      if (companyId) {
+        const { db, companies } = await hydratedCompaniesForSession(null, { companyCodes: [companyId], excludeTables: heavyReadExcludedTables });
+        const company = companies.find((item) => item.id === companyId);
+        if (company) facts = buildCompanyFacts(company, db.months || defaultMonths);
+      }
+      const result = await checkAiConnection(facts);
+      sendJson(response, 200, result);
     } catch (error) {
       const { statusCode, payload } = apiErrorPayload(error);
       sendJson(response, statusCode, payload);
