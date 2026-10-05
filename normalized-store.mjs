@@ -296,7 +296,15 @@ function upsertMemberMetricHistory(tables, memberId, months, legacyMember) {
   return wrote;
 }
 
-function replaceMemberAccounts(tables, memberId, links, stage) {
+// TikTokの数字（フォロワー・いいね・投稿数など）は、アカウントごとに source_ref.stats へ保存する。
+// どのアカウントの数字かを url で持ち、URLが変わったら別アカウントとみなして数字を引き継がない。
+function accountStatsToKeep(account, url, incoming) {
+  if (incoming && typeof incoming === "object" && (!incoming.url || incoming.url === url)) return { ...incoming, url };
+  const previous = account?.source_ref?.stats;
+  return previous && previous.url === url ? previous : null;
+}
+
+function replaceMemberAccounts(tables, memberId, links, stage, statsList = []) {
   const existing = tables.member_accounts.filter((account) => account.member_id === memberId);
   const activeSlots = new Set();
   (links || []).slice(0, 2).forEach((url, index) => {
@@ -318,7 +326,9 @@ function replaceMemberAccounts(tables, memberId, links, stage) {
     account.url = url;
     account.account_stage = legacyToStage[stage] || "build";
     account.active = true;
-    account.source_ref = { source: "frontend", slot };
+    // 保存のたびに source_ref を作り直すため、数字は明示的に引き継ぐ（消えないように）
+    const stats = accountStatsToKeep(account, url, Array.isArray(statsList) ? statsList[index] : null);
+    account.source_ref = { source: "frontend", slot, ...(stats ? { stats } : {}) };
     account.updated_at = new Date().toISOString();
   });
   existing.forEach((account) => {
@@ -491,12 +501,16 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
             const legacyKey = reverseMilestoneMap[milestone.milestone_key];
             if (legacyKey) milestoneValues[legacyKey] = Boolean(milestone.done);
           });
-          const accountLinks = (accountsByMember.get(member.id) || [])
-            .filter((account) => account.active)
+          const activeAccounts = (accountsByMember.get(member.id) || [])
+            .filter((account) => account.active && (account.url || account.handle))
             .sort((a, b) => a.slot - b.slot)
-            .map((account) => account.url || account.handle)
-            .filter(Boolean)
             .slice(0, 2);
+          const accountLinks = activeAccounts.map((account) => account.url || account.handle);
+          // accountLinks と同じ並びで、各アカウントのTikTokの数字（未入力は null）
+          const accountStats = activeAccounts.map((account) => {
+            const stats = account.source_ref?.stats;
+            return stats && stats.url === (account.url || account.handle) ? stats : null;
+          });
           const meetings = (sessionsByMember.get(member.id) || [])
             .filter((session) => !session.deleted_at)
             .sort((a, b) => String(b.occurred_on).localeCompare(String(a.occurred_on)))
@@ -533,6 +547,7 @@ export function hydrateLegacyCompanies(normalizedDb, months, legacyCompanies = [
             ttoSalesHistory: months.map((label, index) => salesBreakdownFromMetric(metricForIndex(label, index)).tto),
             ttsSalesHistory: months.map((label, index) => salesBreakdownFromMetric(metricForIndex(label, index)).tts),
             accountLinks,
+            accountStats,
             clientMemo: member.client_memo || undefined,
             meetings,
             ...milestoneValues
@@ -741,7 +756,7 @@ export function applyLegacyCompaniesToNormalized(normalizedDb, legacyCompanies, 
         ? legacyMember.followerHistory.at(-1)
         : 0;
 
-      replaceMemberAccounts(tables, member.id, legacyMember.accountLinks, legacyMember.stage);
+      replaceMemberAccounts(tables, member.id, legacyMember.accountLinks, legacyMember.stage, legacyMember.accountStats);
       upsertMemberMilestones(tables, member.id, legacyMember);
       // 月次履歴があれば月ごとに保存し、無い旧形式のみ従来どおり対象月へ1件保存する
       if (!upsertMemberMetricHistory(tables, member.id, metricMonths, legacyMember)) {

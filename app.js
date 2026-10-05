@@ -2209,6 +2209,84 @@ function sheetColumns() {
 }
 
 // 進捗更新シートの列を、目的ごとのタブに分ける（「すべての列」で従来の表示）
+// TikTokアカウントの数字（プロフィールを開けば取れる項目）。アカウントごとに持つ
+const TIKTOK_METRICS = [
+  { key: "followers", label: "フォロワー数", short: "フォロワー", type: "count", unit: "人" },
+  { key: "following", label: "フォロー中", short: "フォロー中", type: "count", unit: "人" },
+  { key: "totalLikes", label: "総いいね数", short: "総いいね", type: "count", unit: "件" },
+  { key: "totalPosts", label: "総投稿数", short: "総投稿数", type: "count", unit: "本" },
+  { key: "postsThisMonth", label: "今月の投稿数", short: "今月の投稿", type: "count", unit: "本" },
+  { key: "postsLastMonth", label: "先月の投稿数", short: "先月の投稿", type: "count", unit: "本" },
+  { key: "lastPostDate", label: "最終投稿日", short: "最終投稿日", type: "date" },
+  { key: "likesThisMonth", label: "今月のいいね合計", short: "今月のいいね合計", type: "count", unit: "件" },
+  { key: "topPostUrl", label: "最高いいね投稿（今月）のURL", short: "最高いいね投稿URL", type: "url" },
+  { key: "topPostLikes", label: "最高いいね投稿（今月）のいいね数", short: "最高いいね数", type: "count", unit: "件" }
+];
+
+// 「5.73万」「1.2億」「12K」「57,300」などを数値にする。空欄は未入力（null）
+function parseCount(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim().replace(/[,，\s]/g, "");
+  if (!text) return null;
+  const match = text.match(/^(\d+(?:\.\d+)?)(万|億|k|K|m|M)?$/);
+  if (!match) return null;
+  const scale = { 万: 10000, 億: 100000000, k: 1000, K: 1000, m: 1000000, M: 1000000 }[match[2]] || 1;
+  return Math.round(Number(match[1]) * scale);
+}
+
+// 1万以上はTikTokと同じく「5.73万」の形で短く表示する
+function formatCount(value, unit = "") {
+  if (value === null || value === undefined || value === "") return "未入力";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "未入力";
+  if (number >= 100000000) return `${Number((number / 100000000).toFixed(2))}億${unit}`;
+  if (number >= 10000) return `${Number((number / 10000).toFixed(2))}万${unit}`;
+  return `${number.toLocaleString("ja-JP")}${unit}`;
+}
+
+function tiktokMetric(key) {
+  return TIKTOK_METRICS.find((metric) => metric.key === key);
+}
+
+// 入力欄のフィールド名は「tt1:followers」（1つ目のアカウントのフォロワー数）の形
+function parseTiktokField(field) {
+  const match = String(field || "").match(/^tt([12]):(\w+)$/);
+  if (!match) return null;
+  const metric = tiktokMetric(match[2]);
+  return metric ? { slot: Number(match[1]), metric } : null;
+}
+
+function normalizeTiktokValue(metric, value) {
+  if (metric.type === "count") return parseCount(value);
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+// 登録アカウントと同じ並びで、各アカウントの数字を返す（URLが一致しない古い数字は使わない）
+function accountStatsFor(member) {
+  const links = normalizeAccountLinks(member?.accountLinks);
+  const saved = Array.isArray(member?.accountStats) ? member.accountStats : [];
+  return links.map((link, index) => {
+    const stats = saved[index];
+    return stats && (!stats.url || stats.url === link) ? stats : null;
+  });
+}
+
+// 投稿あたり平均いいね（今月）＝今月のいいね合計 ÷ 今月の投稿数（自動計算）
+function averageLikesThisMonth(stats) {
+  const likes = parseCount(stats?.likesThisMonth);
+  const posts = parseCount(stats?.postsThisMonth);
+  if (likes === null || !posts) return null;
+  return Math.round((likes / posts) * 10) / 10;
+}
+
+function tiktokStatsSourceText(stats) {
+  if (!stats?.updatedAt) return "未入力";
+  const source = stats.source === "auto" ? "自動取得" : "手入力";
+  const monthNote = stats.month && stats.month !== currentMonthKey() ? `（今月分の数字は${stats.month.replace("-", "年")}月時点）` : "";
+  return `${formatDate(stats.updatedAt)} ${source}${monthNote}`;
+}
+
 function sheetTabs() {
   // 列は「種類:キー」で区別する（前提条件のMTGチェックと、MTG登録ボタンの列が同じキー mtg のため）
   const base = ["name:name", "formula:status", "formula:progress"];
@@ -2220,6 +2298,7 @@ function sheetTabs() {
       cols: [...base, ...group.items.map(([key]) => `check:${key}`)]
     })),
     { key: "share", label: "アカウント・メモ・MTG", cols: ["name:name", "accounts:accountLinks", "memo:clientMemo", "mtg:mtg"] },
+    { key: "tiktok", label: "TikTokの数字", cols: [] },
     { key: "all", label: "すべての列", cols: null }
   ];
 }
@@ -2250,8 +2329,9 @@ function renderSheetTabs(tabs) {
   target.innerHTML = tabs.map((tab) => {
     // タブごとの未保存件数（別タブで入力した内容を忘れないように）
     const editable = new Set(columnsForSheetTab(tab).filter((column) => !["name", "formula", "mtg"].includes(column.type)).map((column) => column.key));
+    const isPending = tab.key === "tiktok" ? (field) => Boolean(parseTiktokField(field)) : (field) => editable.has(field);
     const pending = Object.values(state.updateDrafts).reduce((sum, fields) => (
-      sum + Object.keys(fields).filter((field) => editable.has(field)).length
+      sum + Object.keys(fields).filter(isPending).length
     ), 0);
     const active = state.sheetTab === tab.key;
     return `<button class="sheet-tab ${active ? "active" : ""}" data-sheet-tab="${tab.key}" type="button" role="tab" aria-selected="${active}">${tab.label}${pending ? `<b>${pending}</b>` : ""}</button>`;
@@ -2265,6 +2345,14 @@ function renderUpdateSheet() {
   const columns = columnsForSheetTab(activeTab);
   const members = filteredMembers();
   renderSheetTabs(tabs);
+  if (activeTab.key === "tiktok") {
+    $(".update-sheet")?.classList.remove("sheet-all-columns");
+    $(".update-sheet")?.classList.add("sheet-tiktok");
+    renderTiktokSheet(members);
+    updateDraftStatus();
+    return;
+  }
+  $(".update-sheet")?.classList.remove("sheet-tiktok");
   $(".update-sheet")?.classList.toggle("sheet-all-columns", activeTab.cols === null);
 
   const bands = [];
@@ -2303,6 +2391,82 @@ function renderUpdateSheet() {
     </tr>
   `;
   updateDraftStatus();
+}
+
+// 「TikTokの数字」タブ：1行＝1アカウント（1人最大2アカウント）
+function renderTiktokSheet(members) {
+  const inputAttrs = (metric) => metric.type === "date"
+    ? `type="date"`
+    : metric.type === "url"
+      ? `type="url" placeholder="https://www.tiktok.com/@…/video/…"`
+      : `type="text" inputmode="decimal" placeholder="例 5.73万"`;
+  $("#updateSheetHead").innerHTML = `
+    <tr class="sheet-group-row">
+      <th class="sticky-col">対象</th>
+      <th colspan="4">アカウント全体</th>
+      <th colspan="3">投稿</th>
+      <th colspan="4">今月のいいね</th>
+      <th>更新</th>
+    </tr>
+    <tr class="sheet-column-row">
+      <th class="sticky-col">受講生・アカウント</th>
+      ${TIKTOK_METRICS.slice(0, 7).map((metric) => `<th>${metric.short}</th>`).join("")}
+      <th>${tiktokMetric("likesThisMonth").short}</th>
+      <th>平均いいね（自動）</th>
+      <th>${tiktokMetric("topPostUrl").short}</th>
+      <th>${tiktokMetric("topPostLikes").short}</th>
+      <th>最終更新</th>
+    </tr>
+  `;
+  const rows = [];
+  members.forEach((member) => {
+    const links = normalizeAccountLinks(member.accountLinks);
+    const drafts = state.updateDrafts[member.name] || {};
+    if (!links.length) {
+      rows.push(`
+        <tr data-member="${member.name}" class="tiktok-empty-row">
+          <td class="sheet-name sticky-col"><button class="member-link" data-member="${member.name}" type="button">${member.name}</button></td>
+          <td colspan="12"><span class="subtext">アカウント未登録です。「アカウント・メモ・MTG」タブでURLを登録すると入力できます。</span></td>
+        </tr>
+      `);
+      return;
+    }
+    const statsList = accountStatsFor(member);
+    links.forEach((link, index) => {
+      const slot = index + 1;
+      const stats = statsList[index] || {};
+      const value = (metric) => {
+        const field = `tt${slot}:${metric.key}`;
+        const raw = hasOwn(drafts, field) ? drafts[field] : stats[metric.key];
+        return raw === null || raw === undefined ? "" : escapeHtml(String(raw));
+      };
+      const cell = (metric) => {
+        const field = `tt${slot}:${metric.key}`;
+        const pending = hasOwn(drafts, field) ? " pending" : "";
+        return `<td><input class="sheet-input tt-input tt-${metric.type}${pending}" data-field="${field}" ${inputAttrs(metric)} value="${value(metric)}" aria-label="${metric.label}" /></td>`;
+      };
+      // 平均は入力中の値でも計算する
+      const draftOrSaved = (key) => (hasOwn(drafts, `tt${slot}:${key}`) ? drafts[`tt${slot}:${key}`] : stats[key]);
+      const average = averageLikesThisMonth({ likesThisMonth: draftOrSaved("likesThisMonth"), postsThisMonth: draftOrSaved("postsThisMonth") });
+      const rowHasDraft = Object.keys(drafts).some((field) => field.startsWith(`tt${slot}:`));
+      rows.push(`
+        <tr data-member="${member.name}" class="${rowHasDraft ? "has-draft" : ""}">
+          <td class="sheet-name sticky-col">
+            ${index === 0 ? `<button class="member-link" data-member="${member.name}" type="button">${member.name}</button>` : `<span class="tt-second">${member.name}</span>`}
+            <small>${escapeHtml(accountLabel(link, index))}</small>
+          </td>
+          ${TIKTOK_METRICS.slice(0, 8).map(cell).join("")}
+          <td><span class="formula-chip">${average === null ? "—" : formatCount(average, "件")}</span><small class="formula-note">自動計算</small></td>
+          ${cell(tiktokMetric("topPostUrl"))}
+          ${cell(tiktokMetric("topPostLikes"))}
+          <td><small class="tt-updated">${escapeHtml(tiktokStatsSourceText(statsList[index]))}</small></td>
+        </tr>
+      `);
+    });
+  });
+  $("#updateSheetBody").innerHTML = rows.join("") || `
+    <tr><td colspan="13"><div class="table-empty"><strong>更新対象の受講生がいません</strong></div></td></tr>
+  `;
 }
 
 function renderUpdateCell(member, detail, column, index, effectiveMember = member) {
@@ -2579,6 +2743,8 @@ function draftCount() {
 
 function draftValueMatchesOriginal(member, field, value) {
   const current = currentDraftValue(member, field);
+  const tiktok = parseTiktokField(field);
+  if (tiktok) return normalizeTiktokValue(tiktok.metric, current) === normalizeTiktokValue(tiktok.metric, value);
   if (field === "followers") {
     const nextValue = value === "" || value === null || value === undefined ? null : Number(value);
     return ((current === null || current === undefined || current === "") && nextValue === null)
@@ -2597,6 +2763,8 @@ function draftValueMatchesOriginal(member, field, value) {
 }
 
 function draftFieldLabel(field) {
+  const tiktok = parseTiktokField(field);
+  if (tiktok) return `TikTok${tiktok.slot} ${tiktok.metric.label}`;
   if (field === "followers") return "フォロワー";
   if (field === "sales") return "合計売上";
   if (field === "salesTto") return "TTO売上";
@@ -2608,6 +2776,12 @@ function draftFieldLabel(field) {
 }
 
 function draftValueLabel(member, field, value) {
+  const tiktok = parseTiktokField(field);
+  if (tiktok) {
+    const normalized = normalizeTiktokValue(tiktok.metric, value);
+    if (normalized === null) return String(value ?? "").trim() ? `「${value}」は数値として読めません` : "空欄";
+    return tiktok.metric.type === "count" ? formatCount(normalized, tiktok.metric.unit) : String(normalized);
+  }
   if (field === "followers") return Number(value).toLocaleString("ja-JP");
   if (field === "sales") return money(Number(value));
   if (field === "salesTto" || field === "salesTts") return historyValue(value) === null ? "未入力" : money(Number(value));
@@ -2622,6 +2796,8 @@ function draftValueLabel(member, field, value) {
 }
 
 function currentDraftValue(member, field) {
+  const tiktok = parseTiktokField(field);
+  if (tiktok) return accountStatsFor(member)[tiktok.slot - 1]?.[tiktok.metric.key] ?? null;
   const detail = memberDetail(member);
   if (field === "followers") return detail.latestFollower;
   if (field === "sales") return detail.latestSales;
@@ -3113,6 +3289,23 @@ function sumCompanyBreakdown(list) {
 }
 
 function updateSheetMember(member, field, rawValue, checked) {
+  const tiktok = parseTiktokField(field);
+  if (tiktok) {
+    const links = normalizeAccountLinks(member.accountLinks);
+    const link = links[tiktok.slot - 1];
+    if (!link) return;
+    const statsList = accountStatsFor(member);
+    const stats = { ...(statsList[tiktok.slot - 1] || {}) };
+    stats[tiktok.metric.key] = normalizeTiktokValue(tiktok.metric, rawValue);
+    stats.url = link;
+    stats.source = "manual";
+    stats.updatedAt = new Date().toISOString();
+    stats.month = currentMonthKey();
+    statsList[tiktok.slot - 1] = stats;
+    member.accountStats = statsList;
+    addDetailUpdate("数字更新", `${member.name} のTikTok数値を更新`, `${accountLabel(link, tiktok.slot - 1)} ${tiktok.metric.label} ${draftValueLabel(member, field, rawValue)}`, member);
+    return;
+  }
   const detail = memberDetail(member);
   const monthIndex = currentMonthIndex();
   if (field === "followers") {
@@ -3480,6 +3673,7 @@ function renderDetailAccounts(member) {
   const rawLinks = Array.isArray(member.accountLinks) ? member.accountLinks.filter((item) => String(item || "").trim()) : [];
   const links = normalizeAccountLinks(rawLinks);
   const hasLinks = links.length > 0;
+  const statsList = accountStatsFor(member);
   $("#detailAccountPanel").innerHTML = `
     <div class="panel-header compact">
       <div>
@@ -3502,9 +3696,57 @@ function renderDetailAccounts(member) {
               ${isUrl ? `<p>${escapeHtml(text)}</p>` : ""}
             </div>
             ${isUrl ? `<a class="account-open-button" href="${escapeHtml(text)}" target="_blank" rel="noopener noreferrer">開く</a>` : `<em>要確認</em>`}
+            ${renderTiktokStatsBlock(statsList[index])}
           </article>
         `;
       }).join("") : `<p class="subtext">この受講生の運用アカウントはまだ登録されていません。</p>`}
+    </div>
+  `;
+}
+
+// 個人詳細：アカウントごとのTikTokの数字
+function renderTiktokStatsBlock(stats) {
+  if (!stats) {
+    return `<p class="tt-stats-empty">TikTokの数字は未入力です（更新タブの「TikTokの数字」で入力できます）。</p>`;
+  }
+  const show = (key) => {
+    const metric = tiktokMetric(key);
+    const value = stats[key];
+    if (metric.type === "date") return value ? formatDate(value) : "未入力";
+    return formatCount(value, metric.unit);
+  };
+  const average = averageLikesThisMonth(stats);
+  const topUrl = String(stats.topPostUrl || "").trim();
+  return `
+    <div class="tt-stats">
+      <div class="tt-stats-group">
+        <span>アカウント全体</span>
+        <dl>
+          <div><dt>フォロワー</dt><dd>${show("followers")}</dd></div>
+          <div><dt>フォロー中</dt><dd>${show("following")}</dd></div>
+          <div><dt>総いいね</dt><dd>${show("totalLikes")}</dd></div>
+          <div><dt>総投稿数</dt><dd>${show("totalPosts")}</dd></div>
+        </dl>
+      </div>
+      <div class="tt-stats-group">
+        <span>投稿</span>
+        <dl>
+          <div><dt>今月の投稿</dt><dd>${show("postsThisMonth")}</dd></div>
+          <div><dt>先月の投稿</dt><dd>${show("postsLastMonth")}</dd></div>
+          <div><dt>最終投稿日</dt><dd>${show("lastPostDate")}</dd></div>
+        </dl>
+      </div>
+      <div class="tt-stats-group">
+        <span>今月のいいね</span>
+        <dl>
+          <div><dt>合計</dt><dd>${show("likesThisMonth")}</dd></div>
+          <div><dt>投稿あたり平均</dt><dd>${average === null ? "未入力" : formatCount(average, "件")}</dd></div>
+          <div><dt>最高いいね投稿</dt><dd>${topUrl && isAccountUrl(topUrl)
+            ? `<a href="${escapeHtml(topUrl)}" target="_blank" rel="noopener noreferrer">${show("topPostLikes")}</a>`
+            : show("topPostLikes")}</dd></div>
+        </dl>
+      </div>
+      <p class="tt-stats-updated">最終更新: ${escapeHtml(tiktokStatsSourceText(stats))}</p>
     </div>
   `;
 }
